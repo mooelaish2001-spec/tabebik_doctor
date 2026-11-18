@@ -11,14 +11,14 @@ workflows:
           test -f pubspec.yaml || { echo "pubspec.yaml not found in the repo root"; exit 1; }
           test -f lib/main.dart || { echo "lib/main.dart not found"; exit 1; }
 
-      - name: Generate the missing android/ folder
+      - name: Generate Android project with the canonical Tabebik package ID
         script: |
           cp lib/main.dart /tmp/main.dart.bak
-          flutter create --platforms=android --org com.tabibak --project-name tabibak_doctor .
+          flutter create --platforms=android --org com.tabebik --project-name tabebik_doctor .
           cp /tmp/main.dart.bak lib/main.dart
           rm -f test/widget_test.dart
 
-      - name: Allow internet in release builds (Google Fonts needs it)
+      - name: Ensure internet permission
         script: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           grep -q "android.permission.INTERNET" "$MANIFEST" || \
@@ -27,7 +27,7 @@ workflows:
       - name: Get packages
         script: flutter pub get
 
-      - name: Analyze (only real errors stop the build)
+      - name: Analyze
         script: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build APK
