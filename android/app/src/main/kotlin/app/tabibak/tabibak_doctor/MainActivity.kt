@@ -1,4 +1,4 @@
-package app.tabibak.tabibak_doctor
+package com.tabebik.tabebik_doctor
 
 import io.flutter.embedding.android.FlutterActivity
 
