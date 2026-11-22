@@ -5103,7 +5103,7 @@ class _FollowUpsState extends State<FollowUpsScreen> {
             body: Column(children: [
               if (!kFollowUpLive) Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 0), child: notLive()),
               if (me.followUps.isEmpty)
-                const Expanded(child: EmptyState(Icons.fact_check_rounded, 'لا توجد متابعات بعد', 'عند وصول المريض يُنشئ التطبيق كود متابعة تلقائياً. أعطه للمريض ليرفع فحوصاته، وتظهر لك هنا.'))
+                const Expanded(child: EmptyState(Icons.fact_check_rounded, 'لا توجد متابعات بعد', 'بعد إكمال الكشف الحضوري وإغلاق الزيارة، يمكنك إصدار كود إثبات المقابلة للمريض. لا يُصدر الكود عند الوصول أو بدء الكشف.'))
               else ...[
                 Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 10), child: AppSearch('ابحث باسم المريض...', controller: ctl, fill: Colors.white, onChanged: (_) => setState(() {}))),
                 FilterChips(labels, sel: chip, onChanged: (v) => setState(() => chip = v)),
