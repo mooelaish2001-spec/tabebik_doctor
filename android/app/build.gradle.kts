@@ -14,12 +14,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        }
-    }
-
     defaultConfig {
         applicationId = "com.tabebik.tabebik_doctor"
         // Firebase Auth requires minSdk 23 or higher.
@@ -34,6 +28,12 @@ android {
             // Debug signing is for testing only. Configure release signing before publishing.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
