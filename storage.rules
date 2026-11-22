@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function isPatient() { return signedIn() && request.auth.token.role == 'patient'; }
+    function isCenterStaff() {
+      return signedIn()
+        && request.auth.token.role in ['center_manager', 'center_reception']
+        && request.auth.token.centerId is string;
+    }
+    function validReceipt() {
+      return request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'application/pdf'];
+    }
+
+    // Receipt access is bound to trusted custom claims and the booking record.
+    // Until booking ownership/center claims are provisioned, this fails closed.
+    match /receipts/{bookingId}/{fileName} {
+      allow create, update: if isPatient()
+        && validReceipt()
+        && firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.patientUid == request.auth.uid;
+      allow read: if isPatient()
+        && firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.patientUid == request.auth.uid
+        || isCenterStaff()
+        && firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.centerId == request.auth.token.centerId;
+      allow delete: if false;
+    }
+
+    // License documents and medical files must be uploaded through a trusted
+    // backend after verification/encryption. No broad authenticated-user upload.
+    match /licenses/{allPaths=**} { allow read, write: if false; }
+    match /medical/{allPaths=**} { allow read, write: if false; }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
