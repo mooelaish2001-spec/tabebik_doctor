@@ -34,7 +34,7 @@ workflows:
                                     'id("com.android.application") version "9.1.1" apply false', text)
               if count != 1:
                   raise SystemExit("Could not set Android Gradle Plugin to 9.1.1")
-              text = "\\n".join(line for line in text.splitlines() if 'id("org.jetbrains.kotlin.android")' not in line) + "\\n"
+              text = "\n".join(line for line in text.splitlines() if 'id("org.jetbrains.kotlin.android")' not in line) + "\n"
               settings.write_text(text)
 
           app = Path("android/app/build.gradle.kts")
