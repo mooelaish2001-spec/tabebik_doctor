@@ -15,6 +15,9 @@ workflows:
         script: |
           cp lib/main.dart /tmp/main.dart.bak
           flutter create --platforms=android --org com.tabebik --project-name tabebik_doctor .
+          # Flutter stable now requires Gradle 9.3.1; flutter create may preserve the old wrapper.
+          sed -i '' 's/gradle-[0-9.]*-all.zip/gradle-9.3.1-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
+          grep 'distributionUrl' android/gradle/wrapper/gradle-wrapper.properties
           cp /tmp/main.dart.bak lib/main.dart
           rm -f test/widget_test.dart
 
