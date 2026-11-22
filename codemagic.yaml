@@ -15,7 +15,7 @@ workflows:
         script: |
           cp lib/main.dart /tmp/main.dart.bak
           flutter create --platforms=android --org com.tabebik --project-name tabebik_doctor .
-          # Align generated Android files with current Flutter minimums (Gradle 9.5.0, AGP 9.1.1).
+          # Align generated Android files with Flutter 3.50 toolchain (Gradle 9.5.0, AGP 9.3.1, Java 17).
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -41,6 +41,12 @@ workflows:
           if app.exists():
               text = app.read_text()
               text = text.replace('    id("kotlin-android")', '')
+              text = text.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_17")
+              text = re.sub(
+                  r"    kotlinOptions \\{\\s*jvmTarget = JavaVersion[.]VERSION_17[.]toString\\(\\)\\s*\\}",
+                  "    kotlin {\\n        compilerOptions {\\n            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n        }\\n    }",
+                  text,
+              )
               app.write_text(text)
 
           print(wrapper.read_text())
