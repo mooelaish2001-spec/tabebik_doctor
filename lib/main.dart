@@ -1132,13 +1132,11 @@ class Patient {
   Patient(this.id, this.name, this.age, this.female, this.phone, this.time, this.place, this.reason,
       {this.arrived = false, this.status = 0, this.conditions = const [], this.allergies = const [], this.meds = const [], this.surgeries = const [], this.family = '', this.labs = const [], this.last, this.transfusion = '', this.admission = ''});
 
-  /// يبني مريضاً من حجز قادم من تطبيق المريض (Appt.toPlatform هناك) — المفاتيح مطابقة:
-  /// complaint ← reason (بتشتكي من شنو) · conditions/meds/allergies/surgeries/transfusion/admission من الملف الصحي إن وافق المريض على مشاركته.
+  /// يبني بيانات تشغيلية فقط من الحجز. لا تُقرأ الشكوى أو السجلات الطبية من وثيقة الحجز.
+  /// مشاركة البيانات الطبية تحتاج مساراً منفصلاً بموافقة وخادم وصلاحية طبيب موثوقة.
   factory Patient.fromPlatform(int id, Map<String, dynamic> j) {
-    List<String> l(String k) => List<String>.from((j[k] ?? const []) as List);
-    return Patient(id, (j['name'] ?? '') as String, ((j['age'] ?? 0) as num).toInt(), (j['female'] ?? false) as bool, (j['phone'] ?? '') as String, ((j['timeMin'] ?? 0) as num).toInt(), (j['place'] ?? '') as String, (j['complaint'] ?? '') as String,
-        conditions: l('conditions'), allergies: l('allergies'), meds: l('meds'), surgeries: l('surgeries'), transfusion: (j['transfusion'] ?? '') as String, admission: (j['admission'] ?? '') as String)
-      ..fid = (j['id'] ?? '') as String;
+    return Patient(id, (j['name'] ?? '') as String, ((j['age'] ?? 0) as num).toInt(), (j['female'] ?? false) as bool, (j['phone'] ?? '') as String, ((j['timeMin'] ?? 0) as num).toInt(), (j['place'] ?? '') as String, '')
+      ..fid = (j['id'] ?? j['bookingId'] ?? '') as String;
   }
 
   final int id, age, time; // time: دقائق منذ منتصف الليل
@@ -1699,13 +1697,10 @@ class DocState extends ChangeNotifier {
     for (var i = 0; i < list.length; i++) {
       final b = list[i];
       final fid = (b['id'] ?? '') as String;
-      Map<String, dynamic> extra = const {};
-      if (b['sharedHealth'] == true) {
-        try {
-          extra = await Fb.bookingPrivate(fid, 'health') ?? const <String, dynamic>{};
-        } catch (_) {}
-      }
-      final p = Patient.fromPlatform(i + 1, {...b, ...extra});
+      // لا نجلب أي بيانات طبية من مسار الحجز التشغيلي.
+      // لا توجد حالياً خدمة خادمية مكتملة للتحقق من موافقة المريض وربط doctorUid؛
+      // لذلك تبقى الشكوى والملف الصحي غير متاحين هنا بدلاً من تجاوز حدود الصلاحيات.
+      final p = Patient.fromPlatform(i + 1, b);
       final v = b['visit'] is Map ? Map<String, dynamic>.from(b['visit'] as Map) : <String, dynamic>{};
       p.status = v['state'] is num ? (v['state'] as num).toInt() : ((b['status'] ?? '') == 'مكتمل' ? 2 : 0);
       p.arrived = v['arrived'] == true;
