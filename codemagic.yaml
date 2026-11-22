@@ -31,7 +31,7 @@ workflows:
           if settings.exists():
               text = settings.read_text()
               text, count = re.subn(r'id[(]"com[.]android[.]application"[)] version "[^"]+" apply false',
-                                    'id("com.android.application") version "9.1.1" apply false', text)
+                                    'id("com.android.application") version "9.3.1" apply false', text)
               if count != 1:
                   raise SystemExit("Could not set Android Gradle Plugin to 9.1.1")
               text = "\n".join(line for line in text.splitlines() if 'id("org.jetbrains.kotlin.android")' not in line) + "\n"
@@ -42,12 +42,17 @@ workflows:
               text = app.read_text()
               text = text.replace('    id("kotlin-android")', '')
               text = text.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_17")
-              text = re.sub(
-                  r"    kotlinOptions \\{\\s*jvmTarget = JavaVersion[.]VERSION_17[.]toString\\(\\)\\s*\\}",
-                  "    kotlin {\\n        compilerOptions {\\n            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n        }\\n    }",
-                  text,
+              text = re.sub(r"\\n    kotlinOptions\\s*\\{.*?\\n    \\}", "", text, flags=re.S)
+              text = text.replace(
+                  "\\nflutter {",
+                  "\\nkotlin {\\n    compilerOptions {\\n        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n    }\\n}\\n\\nflutter {",
               )
               app.write_text(text)
+
+          gradle_props = Path("android/gradle.properties")
+          props = gradle_props.read_text()
+          if "android.builtInKotlin=true" not in props:
+              gradle_props.write_text(props.rstrip() + "\\nandroid.builtInKotlin=true\\n")
 
           print(wrapper.read_text())
           print(settings.read_text())
