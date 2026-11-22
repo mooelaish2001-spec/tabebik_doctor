@@ -5,6 +5,9 @@ workflows:
     max_build_duration: 30
     environment:
       flutter: stable
+      java: 21
+      android_signing:
+        - tabebik
     scripts:
       - name: Check project files
         script: |
@@ -80,6 +83,61 @@ workflows:
           cp /tmp/main.dart.bak lib/main.dart
           rm -f test/widget_test.dart
 
+      - name: Configure release signing
+        script: |
+          set -e
+
+          # Configure the same Codemagic release keystore used by tabebik_user.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app = Path("android/app/build.gradle.kts")
+          if not app.exists():
+              raise SystemExit("Expected android/app/build.gradle.kts after flutter create")
+          text = app.read_text()
+
+          signing = '''
+              signingConfigs {
+                  create("release") {
+                      if (System.getenv("CI") == "true") {
+                          storeFile = file(requireNotNull(System.getenv("CM_KEYSTORE_PATH")) {
+                              "CM_KEYSTORE_PATH is missing. Check Codemagic android_signing configuration."
+                          })
+                          storePassword = requireNotNull(System.getenv("CM_KEYSTORE_PASSWORD")) {
+                              "CM_KEYSTORE_PASSWORD is missing from Codemagic."
+                          }
+                          keyAlias = requireNotNull(System.getenv("CM_KEY_ALIAS")) {
+                              "CM_KEY_ALIAS is missing from Codemagic."
+                          }
+                          keyPassword = requireNotNull(System.getenv("CM_KEY_PASSWORD")) {
+                              "CM_KEY_PASSWORD is missing from Codemagic."
+                          }
+                      }
+                  }
+              }
+
+          '''
+          if 'create("release")' not in text:
+              marker = "    buildTypes {"
+              if marker not in text:
+                  raise SystemExit("Could not find buildTypes block in generated Gradle file")
+              text = text.replace(marker, signing + marker, 1)
+
+          debug_release = 'signingConfig = signingConfigs.getByName("debug")'
+          ci_release = '''signingConfig = if (System.getenv("CI") == "true") {
+                          signingConfigs.getByName("release")
+                      } else {
+                          signingConfigs.getByName("debug")
+                      }'''
+          if debug_release in text:
+              text = text.replace(debug_release, ci_release, 1)
+          elif 'signingConfigs.getByName("release")' not in text:
+              raise SystemExit("Could not locate release signingConfig in generated Gradle file")
+
+          app.write_text(text)
+          print("Configured CI release signing with Codemagic keystore.")
+          PY
+
       - name: Ensure internet permission
         script: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
@@ -94,6 +152,15 @@ workflows:
 
       - name: Build APK
         script: flutter build apk --release --no-tree-shake-icons --build-number=$BUILD_NUMBER
+
+
+      - name: Print Android SHA-1 and SHA-256 fingerprints
+        script: |
+          set -e
+          echo "========== TABEBIK ANDROID SIGNING FINGERPRINTS =========="
+          cd android
+          ./gradlew --no-daemon :app:signingReport
+          echo "========== END SIGNING FINGERPRINTS =========="
 
     artifacts:
       - build/**/outputs/**/*.apk
