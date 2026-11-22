@@ -67,7 +67,7 @@ workflows:
           }
           '''
               if 'name.startsWith("lintVital")' not in root_text:
-                  root_build.write_text(root_text.rstrip() + "\\n" + lint_workaround)
+                  root_build.write_text(root_text.rstrip() + "\n" + lint_workaround)
 
           gradle_props = Path("android/gradle.properties")
           props = gradle_props.read_text()
