@@ -3800,12 +3800,12 @@ class PatientScreen extends StatelessWidget {
     p.plan = r.$2;
     p.followUp = r.$3;
     p.status = 2;
-    // بعد إنهاء الكشف الحضوري فقط يُنشأ كود فريد للمريض لإثبات حصول المقابلة.
-    // الكود ليس وسيلة لبدء علاج عن بُعد.
-    final fu = me.openFollowUp(p);
-    fu.event(Icons.verified_rounded, 'اكتملت المقابلة الحضورية — أُنشئ كود إثبات المقابلة');
+    // نسجل إكمال المقابلة الحضورية. لا نعرض كوداً محلياً غير قابل للاسترداد من تطبيق المريض.
+    // إصدار الرمز يجب أن يمر عبر issueEncounterCode بعد ربط هوية الطبيب الموثوقة بالخادم.
     me.pushVisit(p);
-    if (c.mounted) snack(c, 'تم حفظ الكشف الحضوري. كود إثبات المقابلة: ${fu.code}', ok: true);
+    if (c.mounted) {
+      snack(c, 'تم حفظ الكشف الحضوري. إصدار كود إثبات المقابلة سيظهر بعد تفعيل الربط الآمن بين التطبيقات.', ok: true);
+    }
   }
 
   Future<void> noShow(BuildContext c) async {
