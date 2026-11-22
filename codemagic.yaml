@@ -15,6 +15,9 @@ workflows:
         script: |
           cp lib/main.dart /tmp/main.dart.bak
           flutter create --platforms=android --org com.tabebik --project-name tabebik_doctor .
+          # Remove stale legacy Kotlin source to prevent duplicate MainActivity declarations.
+          rm -f android/app/src/main/kotlin/app/tabibak/tabibak_doctor/MainActivity.kt
+          find android/app/src/main/kotlin -type d -empty -delete
           # Align generated Android files with Flutter 3.50 toolchain (Gradle 9.5.0, AGP 9.3.1, Java 17).
           python3 - <<'PY'
           from pathlib import Path
