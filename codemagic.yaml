@@ -22,7 +22,7 @@ workflows:
 
           wrapper = Path("android/gradle/wrapper/gradle-wrapper.properties")
           text = wrapper.read_text()
-          text, count = re.subn(r"gradle-[0-9.]+-all\\.zip", "gradle-9.5.0-all.zip", text)
+          text, count = re.subn(r"gradle-[0-9.]+-all[.]zip", "gradle-9.5.0-all.zip", text)
           if count != 1:
               raise SystemExit("Could not set Gradle wrapper to 9.5.0")
           wrapper.write_text(text)
@@ -30,18 +30,17 @@ workflows:
           settings = Path("android/settings.gradle.kts")
           if settings.exists():
               text = settings.read_text()
-              text, count = re.subn(r'id\\("com\\.android\\.application"\\) version "[^"]+" apply false',
+              text, count = re.subn(r'id[(]"com[.]android[.]application"[)] version "[^"]+" apply false',
                                     'id("com.android.application") version "9.1.1" apply false', text)
               if count != 1:
                   raise SystemExit("Could not set Android Gradle Plugin to 9.1.1")
-              text = re.sub(r'^\\s*id\\("org\\.jetbrains\\.kotlin\\.android"\\) version "[^"]+" apply false\\n',
-                            '', text, flags=re.M)
+              text = "\\n".join(line for line in text.splitlines() if 'id("org.jetbrains.kotlin.android")' not in line) + "\\n"
               settings.write_text(text)
 
           app = Path("android/app/build.gradle.kts")
           if app.exists():
               text = app.read_text()
-              text = text.replace('    id("kotlin-android")\\n', '')
+              text = text.replace('    id("kotlin-android")', '')
               app.write_text(text)
 
           print(wrapper.read_text())
