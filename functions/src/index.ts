@@ -54,8 +54,14 @@ export const issueEncounterCode = onCall({secrets:[pepper], enforceAppCheck:true
   const codeHash = hashCode(code);
   await db.runTransaction(async tx => {
     const current = await tx.get(encounterRef);
-    if (current.exists && current.data()?.status === "redeemed") {
+    const currentData = current.data();
+    if (currentData?.status === "redeemed") {
       throw new HttpsError("already-exists", "تم ربط المتابعة لهذا الحجز مسبقاً.");
+    }
+    if (currentData?.status === "issued" &&
+        currentData.expiresAt instanceof Timestamp &&
+        currentData.expiresAt.toMillis() > now) {
+      throw new HttpsError("already-exists", "يوجد رمز صالح لهذا الحجز بالفعل.");
     }
     tx.set(encounterRef, {
       bookingId, patientUid: booking.patientUid, doctorUid: uid,
