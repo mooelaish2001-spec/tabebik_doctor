@@ -2307,13 +2307,7 @@ Future<List<CenterTerms>> invitesFor(String lic) async {
 // ═════════════════════════════════════════════════════════════════════════
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // وضع الاختبار: لا نهيّئ Firebase Auth ولا نرسل SMS؛ الدخول محلي برمز تجريبي.
-  if (Fb.on) {
-    // Firebase: المراكز المعتمدة من Firestore، وجلسة الدخول محفوظة على الجهاز (يفتح مباشرة بلا تسجيل دخول جديد).
-    kRegCenters = [];
-    CentersFeed.start();
-    await me.restoreRemote();
-  }
+  // وضع الاختبار: لا نهيّئ Firebase Auth ولا Firestore ولا نرسل SMS؛ الدخول والبيانات محليان.
   runApp(const DoctorApp());
 }
 
