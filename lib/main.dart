@@ -865,7 +865,7 @@ final otp = OtpService();
 const kDemoData = bool.fromEnvironment('DEMO_DATA', defaultValue: true); // للإنتاج: --dart-define=DEMO_DATA=false
 
 /// يعرض رمز التحقق على الشاشة (لا SMS فعلية في هذه النسخة). للإنتاج: --dart-define=DEMO_OTP=false
-const kDemoOtp = bool.fromEnvironment('DEMO_OTP', defaultValue: true);
+const kDemoOtp = true; // اختبار فقط: رمز عشوائي محلي يظهر على الشاشة، بلا SMS أو تحقق هاتفي.
 
 /// أزرار «محاكاة» لقرارات الطرف الآخر (تأكيد المركز، توثيق الحساب). للإنتاج: --dart-define=SIMULATE=false
 const kSimulate = bool.fromEnvironment('SIMULATE', defaultValue: true);
@@ -2307,8 +2307,7 @@ Future<List<CenterTerms>> invitesFor(String lic) async {
 // ═════════════════════════════════════════════════════════════════════════
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // وضع OTP التجريبي يعطّل Firebase Auth وSMS بالكامل، ويستخدم بيانات محلية للاختبار.
-  if (!kDemoOtp) await Fb.init();
+  // وضع الاختبار: لا نهيّئ Firebase Auth ولا نرسل SMS؛ الدخول محلي برمز تجريبي.
   if (Fb.on) {
     // Firebase: المراكز المعتمدة من Firestore، وجلسة الدخول محفوظة على الجهاز (يفتح مباشرة بلا تسجيل دخول جديد).
     kRegCenters = [];
