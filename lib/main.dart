@@ -1690,7 +1690,7 @@ class DocState extends ChangeNotifier {
     final today = _iso(DateTime.now());
     final list = [
       for (final b in rows)
-        if (((b['status'] ?? '') == 'مؤكد' || (b['status'] ?? '') == 'مكتمل') && (b['dateIso'] ?? '') == today && ((b['type'] ?? 0) as num).toInt() == 0) b
+        if (((b['status'] ?? '') == 'مؤكد' || (b['status'] ?? '') == 'مكتمل') && (b['dateIso'] ?? '') == today && ((b['type'] ?? 0) as num).toInt() == 0 && (b['centerId'] ?? '').toString().isNotEmpty && (b['doctorLic'] ?? '').toString().isNotEmpty) b
     ]..sort((a, b) => ((a['timeMin'] ?? 0) as num).compareTo((b['timeMin'] ?? 0) as num));
     final old = {for (final p in patients) p.fid: p};
     final out = <Patient>[];
