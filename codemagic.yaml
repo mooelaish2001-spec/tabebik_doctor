@@ -42,17 +42,15 @@ workflows:
               text = app.read_text()
               text = text.replace('    id("kotlin-android")', '')
               text = text.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_17")
-              )
-              text = text.replace(
-                  chr(10) + "flutter {",
-                  text,
-              )
+              text = re.sub(r"\n    kotlinOptions\s*\{.*?\n    \}", "", text, flags=re.S)
+              kotlin_block = "\nkotlin {\n    compilerOptions {\n        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\n    }\n}\n"
+              text = text.replace("\nflutter {", kotlin_block + "\nflutter {")
               app.write_text(text)
 
           gradle_props = Path("android/gradle.properties")
           props = gradle_props.read_text()
           if "android.builtInKotlin=true" not in props:
-              gradle_props.write_text(props.rstrip() + "\\nandroid.builtInKotlin=true\\n")
+              gradle_props.write_text(props.rstrip() + chr(10) + "android.builtInKotlin=true" + chr(10))
 
           print(wrapper.read_text())
           print(settings.read_text())
