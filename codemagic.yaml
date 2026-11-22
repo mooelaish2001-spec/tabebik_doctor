@@ -50,6 +50,25 @@ workflows:
               text = text.replace("\nflutter {", kotlin_block + "\nflutter {")
               app.write_text(text)
 
+
+          # Work around the Android Lint CommentDetector crash in release dependencies.
+          # Disable only lintVital* tasks across Android subprojects.
+          root_build = Path("android/build.gradle.kts")
+          if root_build.exists():
+              root_text = root_build.read_text()
+              lint_workaround = '''
+          // Temporary workaround for Android Lint CommentDetector NoSuchMethodError.
+          subprojects {
+              tasks.configureEach {
+                  if (name.startsWith("lintVital")) {
+                      enabled = false
+                  }
+              }
+          }
+          '''
+              if 'name.startsWith("lintVital")' not in root_text:
+                  root_build.write_text(root_text.rstrip() + "\\n" + lint_workaround)
+
           gradle_props = Path("android/gradle.properties")
           props = gradle_props.read_text()
           if "android.builtInKotlin=true" not in props:
