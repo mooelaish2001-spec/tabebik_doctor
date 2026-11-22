@@ -16,7 +16,7 @@ import 'tabibak_firebase.dart';
 //  • أماكن العمل: اختيار مركز مسجّل في طبيبك، أو إضافة مكان جديد ودعوته بواتساب.
 //  • عيانين الليلة: قائمة المرضى + التاريخ المرضي + الفحوصات + آخر مقابلة + ملاحظات الكشف.
 //  • التسجيل: رفع صورة بطاقة المجلس الطبي (إلزامي لغير الموثّقين). الدرجات: أخصائي · استشاري فقط (أُلغيت «مسجّل»).
-//  • المتابعة (Follow-up): كود يُنشأ عند وصول المريض ← يدخله المريض ويرفع الفحوصات ← يراجعها الأخصائي ويضيف فحصاً أو علاجاً
+//  • المتابعة: بعد مقابلة حضورية مكتملة يصدر الطبيب كود إثبات؛ يدخله المريض لربط المتابعة ورفع الفحوصات.
 //    أو يطلب مقابلة عاجلة أو يحوّل لأخصائي آخر — انظر قسم «المتابعة» ونقاط الربط (3) (4) (5).
 //  • البيانات محلية في الذاكرة (DocState) ولا يوجد خادم حقيقي بعد — انظر قسم «نقاط الربط».
 // ═════════════════════════════════════════════════════════════════════════
@@ -1892,11 +1892,11 @@ class DocState extends ChangeNotifier {
     }
   }
 
-  /// يفتح متابعة لهذه الزيارة ويولّد كودها (إن لم تكن مفتوحة). يُستدعى عند وصول المريض أو بدء الكشف.
+  /// يفتح متابعة لهذه الزيارة ويولّد كود إثبات المقابلة (بعد إنهاء الكشف الحضوري فقط).
   FollowUp openFollowUp(Patient p) {
     final old = fuOf(p);
     if (old != null) return old;
-    final f = FollowUp(_fid(), _fuKey(p), p.name, p.age, p.female, p.phone, p.place, _newCode(), allergies: p.allergies, reason: p.reason)..event(Icons.vpn_key_rounded, 'أُنشئ كود المتابعة');
+    final f = FollowUp(_fid(), _fuKey(p), p.name, p.age, p.female, p.phone, p.place, _newCode(), allergies: p.allergies, reason: p.reason)..event(Icons.vpn_key_rounded, 'أُنشئ كود إثبات المقابلة الحضورية');
     followUps.insert(0, f);
     notifyListeners();
     return f;
@@ -3952,14 +3952,14 @@ class PatientScreen extends StatelessWidget {
   Widget followBlock(BuildContext c) {
     final f = me.fuOf(p);
     if (f == null) {
-      final can = p.arrived || p.status > 0;
+      final can = p.status == 2;
       return panel([
         Row(children: [
           tileIcon(Icons.fact_check_rounded, size: 42, color: kTeal, bg: kTealBg),
           gapW(12),
-          Expanded(child: two('إثبات المقابلة والمتابعة', can ? 'أنشئ كوداً بعد إتمام المقابلة الحضورية' : 'يظهر الكود بعد إنهاء الكشف الحضوري')),
+          Expanded(child: two('إثبات المقابلة والمتابعة', can ? 'الكشف مكتمل؛ الكود جاهز للمريض' : 'لا يصدر الكود إلا بعد إنهاء الكشف الحضوري')),
         ]),
-        if (can) ...[gap(12), OutBtn('إنشاء كود المتابعة', icon: Icons.vpn_key_rounded, height: 44, onTap: () => go(c, FollowUpScreen(me.openFollowUp(p))))],
+        if (can) ...[gap(12), OutBtn('إنشاء / عرض كود إثبات المقابلة', icon: Icons.vpn_key_rounded, height: 44, onTap: () => go(c, FollowUpScreen(me.openFollowUp(p))))],
       ]);
     }
     return Tap(
@@ -5289,7 +5289,7 @@ class FollowUpScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(18),
           child: Column(children: [
-            Text('كود المتابعة', style: t(13, w: FontWeight.w600, c: live ? const Color(0xE6FFFFFF) : kGrey)),
+            Text('كود إثبات المقابلة الحضورية', style: t(13, w: FontWeight.w600, c: live ? const Color(0xE6FFFFFF) : kGrey)),
             gap(6),
             Directionality(textDirection: TextDirection.ltr, child: Text(fmtCode(f.code), style: t(40, c: live ? Colors.white : kGrey, h: 1.2))),
             gap(6),
@@ -5308,7 +5308,7 @@ class FollowUpScreen extends StatelessWidget {
                   }, true),
                 ),
                 gapW(8),
-                Expanded(child: codeBtn('عبر واتساب', Icons.chat_rounded, () => openWhatsApp(c, f.phone, 'كود متابعتك في تطبيق «طبيبك»: ${f.code}\nافتح التطبيق ← المتابعة ← أدخل الكود لترفع الفحوصات التي طلبها الطبيب. الكود صالح 24 ساعة ولك وحدك.'), true)),
+                Expanded(child: codeBtn('عبر واتساب', Icons.chat_rounded, () => openWhatsApp(c, f.phone, 'كود إثبات مقابلتك الحضورية في «طبيبك»: ${f.code}\nأدخل الكود في التطبيق لربط متابعة هذه الزيارة ورفع الفحوصات المطلوبة. الكود صالح 24 ساعة ومخصص لك.'), true)),
                 gapW(8),
                 Expanded(child: codeBtn('كود جديد', Icons.refresh_rounded, () => renew(c), true)),
               ])
