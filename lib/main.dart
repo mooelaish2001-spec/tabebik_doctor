@@ -2307,7 +2307,8 @@ Future<List<CenterTerms>> invitesFor(String lic) async {
 // ═════════════════════════════════════════════════════════════════════════
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Fb.init();
+  // وضع OTP التجريبي يعطّل Firebase Auth وSMS بالكامل، ويستخدم بيانات محلية للاختبار.
+  if (!kDemoOtp) await Fb.init();
   if (Fb.on) {
     // Firebase: المراكز المعتمدة من Firestore، وجلسة الدخول محفوظة على الجهاز (يفتح مباشرة بلا تسجيل دخول جديد).
     kRegCenters = [];
@@ -2773,17 +2774,9 @@ class _OtpState extends State<OtpScreen> {
     });
   }
 
-  /// Firebase: رسالة SMS حقيقية. الوضع التجريبي: رمز يظهر على الشاشة.
+  /// رمز تجريبي محلي فقط؛ لا يتم الاتصال بخدمة SMS أو Firebase Auth.
   void _send() {
-    if (Fb.on) {
-      Fb.sendCode(widget.phone, onSent: () {}, onError: (m) {
-        if (mounted) setState(() => err = m);
-      }, onAuto: () {
-        if (mounted) _fbDone();
-      });
-    } else {
-      demoCode = otp.send(widget.phone);
-    }
+    demoCode = otp.send(widget.phone);
   }
 
   /// بعد التحقق عبر Firebase: حسابي ← الرئيسية · ملف سجّله مركز ← مطالبة وتعبئة · جديد ← نموذج الملف · غير ذلك ← رفض.
@@ -2830,21 +2823,6 @@ class _OtpState extends State<OtpScreen> {
     final code = cs.map((c) => latin(c.text)).join();
     if (code.length != len) {
       setState(() => err = 'أدخل الرمز المكوّن من $len أرقام');
-      return;
-    }
-    if (Fb.on) {
-      setState(() => busy = true);
-      final fe = await Fb.verify(code);
-      if (fe != null) {
-        if (mounted) {
-          setState(() {
-            err = fe;
-            busy = false;
-          });
-        }
-        return;
-      }
-      await _fbDone();
       return;
     }
     final e = otp.check(widget.phone, code);
@@ -2946,7 +2924,7 @@ class _OtpState extends State<OtpScreen> {
                 ? Text.rich(TextSpan(text: 'إعادة إرسال الرمز بعد ', style: t(12.5, w: FontWeight.w500, c: kGrey), children: [TextSpan(text: '00:${left.toString().padLeft(2, '0')}', style: t(12.5, c: kRed))]))
                 : Tap(onTap: resend, child: Padding(padding: const EdgeInsets.all(8), child: Text('إعادة إرسال الرمز', style: t(13.5, c: kRed)))),
           ),
-          if (kDemoOtp && !Fb.on) ...[
+          if (kDemoOtp) ...[
             gap(14),
             Container(
               padding: const EdgeInsets.all(12),
