@@ -1717,7 +1717,7 @@ class DocState extends ChangeNotifier {
         if (o.status == 1 && p.status == 0) p.status = 1; // جلسة جارية لم تُرفع بعد
       }
       out.add(p);
-      if ((p.arrived || p.status == 1) && p.status < 2) openFollowUp(p); // وصل المريض ← كود المتابعة جاهز
+      // لا ننشئ كوداً لمجرد وصول المريض أو بدء الكشف؛ الكود يثبت مقابلة حضورية مكتملة.
       if (!_bkFirst && !_seenBookings.contains(fid)) {
         note(Icons.event_available_rounded, 'حجز جديد مؤكد', '${p.name} · ${fmtTime(p.time)} · ${p.place}', dest: 1);
       }
@@ -3786,11 +3786,11 @@ class PatientScreen extends StatelessWidget {
       snack(c, 'أنهِ كشف ${cur.name} أولاً');
       return;
     }
+    // بدء الكشف يسجل حضور المريض فقط. لا يُنشأ كود إثبات المقابلة قبل إتمام الزيارة.
     p.status = 1;
     p.arrived = true;
-    final fu = me.openFollowUp(p);
     me.pushVisit(p);
-    snack(c, fu.codeLive ? 'بدأ الكشف — ${p.name} · كود المتابعة ${fu.code}' : 'بدأ الكشف — ${p.name}', ok: true);
+    snack(c, 'بدأ الكشف الحضوري مع ${p.name}. سيظهر كود إثبات المقابلة بعد إنهاء الكشف.', ok: true);
   }
 
   Future<void> finish(BuildContext c) async {
@@ -3800,8 +3800,12 @@ class PatientScreen extends StatelessWidget {
     p.plan = r.$2;
     p.followUp = r.$3;
     p.status = 2;
+    // بعد إنهاء الكشف الحضوري فقط يُنشأ كود فريد للمريض لإثبات حصول المقابلة.
+    // الكود ليس وسيلة لبدء علاج عن بُعد.
+    final fu = me.openFollowUp(p);
+    fu.event(Icons.verified_rounded, 'اكتملت المقابلة الحضورية — أُنشئ كود إثبات المقابلة');
     me.pushVisit(p);
-    if (c.mounted) snack(c, 'تم حفظ الكشف', ok: true);
+    if (c.mounted) snack(c, 'تم حفظ الكشف الحضوري. كود إثبات المقابلة: ${fu.code}', ok: true);
   }
 
   Future<void> noShow(BuildContext c) async {
@@ -3944,7 +3948,7 @@ class PatientScreen extends StatelessWidget {
     ]);
   }
 
-  /// كود المتابعة وحالتها داخل ملف المريض (يُنشأ تلقائياً عند الوصول أو بدء الكشف).
+  /// كود إثبات المقابلة الحضورية: لا يُنشأ إلا بعد إنهاء الطبيب للكشف، ثم يستخدمه المريض لربط المتابعة.
   Widget followBlock(BuildContext c) {
     final f = me.fuOf(p);
     if (f == null) {
@@ -3953,7 +3957,7 @@ class PatientScreen extends StatelessWidget {
         Row(children: [
           tileIcon(Icons.fact_check_rounded, size: 42, color: kTeal, bg: kTealBg),
           gapW(12),
-          Expanded(child: two('متابعة المريض', can ? 'أنشئ كود المتابعة ليرفع المريض فحوصاته' : 'يُنشأ الكود تلقائياً عند وصول المريض')),
+          Expanded(child: two('إثبات المقابلة والمتابعة', can ? 'أنشئ كوداً بعد إتمام المقابلة الحضورية' : 'يظهر الكود بعد إنهاء الكشف الحضوري')),
         ]),
         if (can) ...[gap(12), OutBtn('إنشاء كود المتابعة', icon: Icons.vpn_key_rounded, height: 44, onTap: () => go(c, FollowUpScreen(me.openFollowUp(p))))],
       ]);
@@ -5014,7 +5018,7 @@ class _FollowUpsState extends State<FollowUpsScreen> {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Icon(Icons.info_outline_rounded, color: kAmber, size: 20),
           gapW(8),
-          Expanded(child: Text('وضع تجريبي: المتابعة غير موصولة بالخادم بعد، فلا يصل الكود إلى تطبيق المريض ولا تعود الصور. (بعد الربط: FOLLOWUP_LIVE=true)', style: t(11.5, w: FontWeight.w600, c: kAmber, h: 1.6))),
+          Expanded(child: Text('هذا الكود لإثبات مقابلة حضورية تمت بالفعل، وليس لبدء علاج عن بُعد. الربط المباشر مع تطبيق المريض ورفع الفحوصات يحتاج تفعيل خدمة الخادم أولاً؛ المزامنة ليست مكتملة في هذه النسخة.', style: t(11.5, w: FontWeight.w600, c: kAmber, h: 1.6))),
         ]),
       );
 
