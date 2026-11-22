@@ -42,10 +42,10 @@ workflows:
               text = app.read_text()
               text = text.replace('    id("kotlin-android")', '')
               text = text.replace("JavaVersion.VERSION_11", "JavaVersion.VERSION_17")
-              text = re.sub(r"\n    kotlinOptions\s*\{.*?\n    \}", "", text, flags=re.S)
+              )
               text = text.replace(
-                  "\\nflutter {",
-                  "\\nkotlin {\\n    compilerOptions {\\n        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n    }\\n}\\n\\nflutter {",
+                  chr(10) + "flutter {",
+                  text,
               )
               app.write_text(text)
 
