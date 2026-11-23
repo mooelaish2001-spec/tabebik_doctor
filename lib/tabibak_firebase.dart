@@ -339,8 +339,18 @@ class Fb {
 
   /// قائمة الطبيب تُقرأ من Callable Admin SDK لأن client Firestore rules مغلقة.
   static Stream<List<Map<String, dynamic>>> bookingsOfDoctor(String lic) async* {
+    if (lic.trim().isEmpty) {
+      yield const <Map<String, dynamic>>[];
+      return;
+    }
     while (true) {
-      yield await fetchDoctorBookings();
+      try {
+        yield await fetchDoctorBookings();
+      } catch (e) {
+        // Keep the polling stream alive; the UI can retry on the next cycle.
+        // Do not fall back to direct Firestore reads because rules deny them.
+        yield const <Map<String, dynamic>>[];
+      }
       await Future<void>.delayed(const Duration(seconds: 20));
     }
   }
