@@ -53,15 +53,13 @@ class Fb {
     if (!const bool.fromEnvironment('FIREBASE', defaultValue: true)) return;
     try {
       await Firebase.initializeApp();
-      try {
-        await FirebaseAppCheck.instance.activate(
-          androidProvider: AndroidProvider.playIntegrity,
-        );
-      } catch (_) {
-        // Callable endpoints still enforce App Check; failures must remain visible
-        // when the callable is attempted rather than falling back to local writes.
-      }
+      // Callable endpoints enforce App Check. If attestation cannot initialize,
+      // keep Firebase unavailable instead of silently downgrading security.
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: AndroidProvider.playIntegrity,
+      );
       on = true;
+      initError = '';
     } catch (e) {
       initError = '$e';
       on = false;
