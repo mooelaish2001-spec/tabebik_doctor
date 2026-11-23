@@ -25,6 +25,107 @@ function validId(v: unknown): v is string {
  * الطبيب يصدر الرمز فقط بعد أن يثبت booking.visit.state=2 وstatus=مكتمل.
  * يجب أن تمنح جهة موثوقة custom claim role=doctor وdoctorLic للطبيب.
  */
+const patientBookingKeys = new Set([
+  "code", "type", "svc", "centerId", "doctorLic", "name", "phone",
+  "age", "female", "title", "when", "dateIso", "timeMin", "place", "price"
+]);
+
+/** ينشئ حجزاً تشغيلياً من خلال الخادم؛ لا يقبل أي شكوى أو تشخيص أو سجل طبي. */
+export const createPatientBooking = onCall({enforceAppCheck:true}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const input = request.data ?? {};
+  const unexpected = Object.keys(input).filter((key) => !patientBookingKeys.has(key));
+  if (unexpected.length) throw new HttpsError("invalid-argument", "بيانات الحجز تحتوي حقولاً غير مسموح بها.");
+
+  const type = Number(input.type);
+  const svc = Number(input.svc ?? 0);
+  const centerId = typeof input.centerId === "string" ? input.centerId.trim() : "";
+  const doctorLic = typeof input.doctorLic === "string" ? input.doctorLic.trim() : "";
+  const dateIso = typeof input.dateIso === "string" ? input.dateIso : "";
+  const timeMin = Number(input.timeMin ?? 0);
+  const age = Number(input.age ?? 0);
+  const price = Number(input.price ?? 0);
+  if (![0,1,2].includes(type) || ![0,1,2].includes(svc) ||
+      !centerId || centerId.length > 160 ||
+      typeof input.name !== "string" || !input.name.trim() || input.name.length > 120 ||
+      typeof input.phone !== "string" || input.phone.length > 30 ||
+      !Number.isInteger(age) || age < 0 || age > 120 ||
+      typeof input.female !== "boolean" ||
+      typeof input.title !== "string" || input.title.length > 180 ||
+      typeof input.when !== "string" || input.when.length > 100 ||
+      !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateIso) ||
+      !Number.isInteger(timeMin) || timeMin < 0 || timeMin > 1439 ||
+      typeof input.place !== "string" || input.place.length > 220 ||
+      !Number.isInteger(price) || price < 0 || price > 100000000) {
+    throw new HttpsError("invalid-argument", "بيانات الحجز الأساسية غير مكتملة أو غير صحيحة.");
+  }
+
+  const centerRef = db.collection("centers").doc(centerId);
+  const doctorRef = doctorLic ? db.collection("doctors").doc(doctorLic) : null;
+  const membershipRef = doctorLic ? db.collection("memberships").doc(doctorLic + "_" + centerId) : null;
+  if (type === 0 && (!doctorRef || !membershipRef)) {
+    throw new HttpsError("failed-precondition", "حجز الطبيب يحتاج طبيباً ومركزاً مسجلين.");
+  }
+  const bookingRef = db.collection("bookings").doc();
+  let doctorUid = "";
+
+  await db.runTransaction(async tx => {
+    const centerSnap = await tx.get(centerRef);
+    const doctorSnap = doctorRef ? await tx.get(doctorRef) : null;
+    const membershipSnap = membershipRef ? await tx.get(membershipRef) : null;
+    if (!centerSnap.exists || centerSnap.data()?.status !== 1) {
+      throw new HttpsError("failed-precondition", "المركز غير معتمد أو غير متاح للحجز.");
+    }
+    if (type === 0) {
+      const doctor = doctorSnap?.data();
+      if (!doctorSnap?.exists || doctor?.verified !== true || typeof doctor?.uid !== "string" || !doctor.uid ||
+          membershipSnap?.data()?.status !== "active") {
+        throw new HttpsError("failed-precondition", "الطبيب أو عضويته في المركز غير معتمدين للحجز.");
+      }
+      doctorUid = doctor.uid;
+    }
+    tx.create(bookingRef, {
+      code: typeof input.code === "string" ? input.code.slice(0, 40) : "",
+      type, svc, centerId, doctorLic, doctorUid,
+      name: input.name.trim(), patientName: input.name.trim(),
+      phone: input.phone.trim(), patientPhone: input.phone.trim(),
+      age, female: input.female,
+      title: input.title.trim(), when: input.when.trim(),
+      dateIso, timeMin, place: input.place.trim(), price,
+      patientUid: request.auth!.uid,
+      status: "جديد",
+      visit: {state: 0, arrived: false},
+      encounterIssued: false,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  return {bookingId: bookingRef.id, created:true};
+});
+
+/** قائمة تشغيلية للطبيب الموثّق فقط؛ لا تعيد أي حقل طبي. */
+export const listDoctorBookings = onCall({enforceAppCheck:true}, async (request) => {
+  const uid = requireRole(request, "doctor");
+  const doctorLic = request.auth!.token.doctorLic;
+  if (typeof doctorLic !== "string" || !doctorLic) {
+    throw new HttpsError("permission-denied", "حساب الطبيب غير موثّق على الخادم.");
+  }
+  const doctorSnap = await db.collection("doctors").doc(doctorLic).get();
+  if (!doctorSnap.exists || doctorSnap.data()?.uid !== uid || doctorSnap.data()?.verified !== true) {
+    throw new HttpsError("permission-denied", "هوية الطبيب غير معتمدة.");
+  }
+  const snap = await db.collection("bookings").where("doctorUid", "==", uid).limit(100).get();
+  const keys = ["type", "svc", "centerId", "doctorLic", "doctorUid", "name", "phone", "age", "female",
+    "title", "when", "dateIso", "timeMin", "place", "price", "status", "visit", "encounterIssued"];
+  return {bookings:snap.docs.map(doc => {
+    const data = doc.data();
+    const row: Record<string, unknown> = {id:doc.id, bookingId:doc.id};
+    for (const key of keys) if (data[key] !== undefined) row[key] = data[key];
+    return row;
+  })};
+});
+
 /**
  * تسجيل وصول المريض. لا يسمح إلا للطبيب المعيّن على الحجز بتأكيد الحضور.
  */
@@ -40,7 +141,7 @@ export const markEncounterArrived = onCall({enforceAppCheck:true}, async (reques
     const doctorSnap = doctorRef ? await tx.get(doctorRef) : null;
     if (!snap.exists) throw new HttpsError("not-found", "الحجز غير موجود.");
     const b = snap.data()!;
-    if (!doctorLic || b.doctorLic !== doctorLic || !doctorSnap?.exists || doctorSnap.data()?.uid !== uid) {
+    if (!doctorLic || b.doctorLic !== doctorLic || !doctorSnap?.exists || doctorSnap.data()?.uid !== uid || doctorSnap.data()?.verified !== true) {
       throw new HttpsError("permission-denied", "هوية الطبيب أو ارتباطه بالحجز غير موثّق.");
     }
     if (b.status !== "مؤكد" || Number(b.type ?? 0) !== 0) {
@@ -83,7 +184,7 @@ export const issueEncounterCode = onCall({secrets:[pepper], enforceAppCheck:true
     const doctorSnap = await tx.get(doctorRef);
     if (!bookingSnap.exists) throw new HttpsError("not-found", "الحجز غير موجود.");
     const booking = bookingSnap.data()!;
-    if (booking.doctorUid !== uid || booking.doctorLic !== doctorLic || !doctorSnap.exists || doctorSnap.data()?.uid !== uid) {
+    if (booking.doctorUid !== uid || booking.doctorLic !== doctorLic || !doctorSnap.exists || doctorSnap.data()?.uid !== uid || doctorSnap.data()?.verified !== true) {
       throw new HttpsError("permission-denied", "هوية الطبيب أو ارتباطه بالحجز غير موثّق.");
     }
     if (booking.status !== "مؤكد" || booking.visit?.state !== 1 || booking.visit?.arrived !== true) {
