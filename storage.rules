@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// SAFE DEFAULT ONLY.
+// All client Storage access remains denied until production authorization
+// rules are reviewed and implemented. Do not deploy this file as final rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
