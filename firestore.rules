@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// SAFE DEFAULT ONLY.
+// All client access remains denied until production role-based rules are
+// reviewed and implemented. Do not deploy this file if the apps need access.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
