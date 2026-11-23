@@ -262,12 +262,49 @@ export const redeemEncounterCode = onCall({secrets:[pepper], enforceAppCheck:tru
       throw new HttpsError("not-found", "الرمز غير صحيح أو غير متاح.");
     }
     const bookingRef = db.collection("bookings").doc(e.bookingId);
+    const followUpRef = db.collection("followUps").doc(e.bookingId);
     const bookingSnap = await tx.get(bookingRef);
+    const followUpSnap = await tx.get(followUpRef);
     if (!bookingSnap.exists || bookingSnap.data()?.patientUid !== uid ||
         bookingSnap.data()?.status !== "مكتمل" || bookingSnap.data()?.visit?.state !== 2) {
       throw new HttpsError("failed-precondition", "تعذر إثبات المقابلة لهذا الحجز.");
     }
+    if (followUpSnap.exists) throw new HttpsError("already-exists", "تم ربط المتابعة لهذا الحجز مسبقاً.");
     tx.update(ref, {status:"redeemed", redeemedAt:FieldValue.serverTimestamp(), updatedAt:FieldValue.serverTimestamp()});
+    tx.create(followUpRef, {
+      bookingId:e.bookingId, patientUid:uid, doctorUid:e.doctorUid,
+      doctorLic:e.doctorLic, centerId:e.centerId, status:"active",
+      createdAt:FieldValue.serverTimestamp(), linkedAt:FieldValue.serverTimestamp()
+    });
     return {encounterId:e.bookingId, bookingId:e.bookingId, doctorLic:e.doctorLic, centerId:e.centerId, linked:true};
   });
+});
+
+
+/** قائمة متابعات المريض؛ تعيد بيانات تعريفية وتشغيلية فقط دون تشخيص أو علاج. */
+export const listPatientFollowUps = onCall({enforceAppCheck:true}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const uid = request.auth.uid as string;
+  const snap = await db.collection("followUps").where("patientUid", "==", uid).limit(50).get();
+  const rows = await Promise.all(snap.docs.map(async doc => {
+    const f = doc.data();
+    const [bookingSnap, doctorSnap, centerSnap] = await Promise.all([
+      db.collection("bookings").doc(f.bookingId).get(),
+      db.collection("doctors").doc(String(f.doctorLic ?? "")).get(),
+      db.collection("centers").doc(String(f.centerId ?? "")).get()
+    ]);
+    const booking = bookingSnap.data() ?? {};
+    const doctor = doctorSnap.data() ?? {};
+    const center = centerSnap.data() ?? {};
+    return {
+      id:doc.id, bookingId:f.bookingId, status:f.status,
+      doctorLic:f.doctorLic ?? "", doctorName:doctor.name ?? "",
+      centerId:f.centerId ?? "", centerName:center.name ?? "",
+      dateIso:booking.dateIso ?? "", timeMin:booking.timeMin ?? 0,
+      createdAt:f.createdAt instanceof Timestamp ? f.createdAt.toMillis() : 0,
+      linkedAt:f.linkedAt instanceof Timestamp ? f.linkedAt.toMillis() : 0
+    };
+  }));
+  rows.sort((a,b) => b.createdAt - a.createdAt);
+  return {followUps:rows};
 });
