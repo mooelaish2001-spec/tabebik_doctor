@@ -327,7 +327,23 @@ class Fb {
 
   static Stream<List<Map<String, dynamic>>> bookingsOfPatient(String uid) => _watch(_db.collection('bookings').where('patientUid', isEqualTo: uid));
   static Stream<List<Map<String, dynamic>>> bookingsOfCenter(String centerId) => _watch(_db.collection('bookings').where('centerId', isEqualTo: centerId));
-  static Stream<List<Map<String, dynamic>>> bookingsOfDoctor(String lic) => _watch(_db.collection('bookings').where('doctorLic', isEqualTo: lic));
+  static Future<List<Map<String, dynamic>>> fetchDoctorBookings() async {
+    if (!on || uid == null) throw StateError('جلسة الطبيب غير متاحة.');
+    final result = await _functions.httpsCallable('listDoctorBookings').call();
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return (data['bookings'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  /// قائمة الطبيب تُقرأ من Callable Admin SDK لأن client Firestore rules مغلقة.
+  static Stream<List<Map<String, dynamic>>> bookingsOfDoctor(String lic) async* {
+    while (true) {
+      yield await fetchDoctorBookings();
+      await Future<void>.delayed(const Duration(seconds: 20));
+    }
+  }
 
   // ───────────────────────── الصور (إشعارات التحويل) ─────────────────────────
   static Future<String> upload(String path, Uint8List bytes) async {
