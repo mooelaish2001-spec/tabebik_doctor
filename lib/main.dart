@@ -1559,7 +1559,8 @@ class DocState extends ChangeNotifier {
     try {
       final d = await Fb.doctorOfUid(u);
       if (d != null) {
-        loadFromDoc(d, Fb.phone);
+        final savedPhone = await Fb.accountPhone;
+        loadFromDoc(d, savedPhone.isNotEmpty ? savedPhone : (d['phone'] ?? '').toString());
         startSync();
       }
     } catch (_) {}
