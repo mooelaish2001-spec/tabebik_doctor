@@ -1891,7 +1891,7 @@ class DocState extends ChangeNotifier {
   FollowUp openFollowUp(Patient p, {required String code}) {
     final old = fuOf(p);
     if (old != null) return old;
-    if (!RegExp(r'^\d{6}).hasMatch(code)) {
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       throw ArgumentError('A server-issued six-digit encounter code is required.');
     }
     final f = FollowUp(_fid(), _fuKey(p), p.name, p.age, p.female, p.phone, p.place, code, allergies: p.allergies, reason: p.reason)..event(Icons.vpn_key_rounded, 'أصدر الخادم كود إثبات المقابلة الحضورية');
@@ -3809,7 +3809,7 @@ class PatientScreen extends StatelessWidget {
     try {
       final issued = await Fb.issueEncounterCode(p.fid);
       final code = (issued['code'] ?? '').toString();
-      if (!RegExp(r'^\\d{6}$').hasMatch(code)) {
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
         throw StateError('لم يُرجع الخادم رمز إثبات صالحاً.');
       }
       p.diagnosis = r.$1;
@@ -7814,7 +7814,7 @@ class PatientScreen extends StatelessWidget {
     try {
       final issued = await Fb.issueEncounterCode(p.fid);
       final code = (issued['code'] ?? '').toString();
-      if (!RegExp(r'^\d{6}).hasMatch(code)) {
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
         throw StateError('لم يُرجع الخادم رمز إثبات صالحاً.');
       }
       p.diagnosis = r.$1;
