@@ -2307,7 +2307,12 @@ Future<List<CenterTerms>> invitesFor(String lic) async {
 // ═════════════════════════════════════════════════════════════════════════
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // وضع الاختبار: لا نهيّئ Firebase Auth ولا Firestore ولا نرسل SMS؛ الدخول والبيانات محليان.
+  await Fb.init();
+  if (Fb.on) {
+    // استعادة جلسة الطبيب من Firebase ثم بدء مراقبة المراكز والحجوزات والعضويات.
+    await me.restoreRemote();
+    CentersFeed.start();
+  }
   runApp(const DoctorApp());
 }
 
@@ -2767,9 +2772,22 @@ class _OtpState extends State<OtpScreen> {
     });
   }
 
-  /// رمز تجريبي محلي فقط؛ لا يتم الاتصال بخدمة SMS أو Firebase Auth.
+  /// Firebase Auth يرسل SMS فعلياً؛ المحاكاة المحلية متاحة فقط عند تعطيل Firebase.
   void _send() {
-    demoCode = otp.send(widget.phone);
+    if (Fb.on) {
+      Fb.sendCode(
+        widget.phone,
+        onSent: () {
+          if (mounted) setState(() => err = null);
+        },
+        onError: (m) {
+          if (mounted) setState(() => err = m);
+        },
+        onAuto: _fbDone,
+      );
+    } else {
+      demoCode = otp.send(widget.phone);
+    }
   }
 
   /// بعد التحقق عبر Firebase: حسابي ← الرئيسية · ملف سجّله مركز ← مطالبة وتعبئة · جديد ← نموذج الملف · غير ذلك ← رفض.
@@ -2816,6 +2834,22 @@ class _OtpState extends State<OtpScreen> {
     final code = cs.map((c) => latin(c.text)).join();
     if (code.length != len) {
       setState(() => err = 'أدخل الرمز المكوّن من $len أرقام');
+      return;
+    }
+    if (Fb.on) {
+      setState(() {
+        busy = true;
+        err = null;
+      });
+      final authError = await Fb.verify(code);
+      if (authError != null) {
+        if (mounted) setState(() {
+          busy = false;
+          err = authError;
+        });
+        return;
+      }
+      await _fbDone();
       return;
     }
     final e = otp.check(widget.phone, code);
