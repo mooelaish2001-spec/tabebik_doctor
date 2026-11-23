@@ -228,19 +228,38 @@ export const redeemEncounterCode = onCall({secrets:[pepper], enforceAppCheck:tru
   if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
     throw new HttpsError("invalid-argument", "أدخل رمزاً مكوناً من ستة أرقام.");
   }
+  // حدّ محاولات الاسترداد لكل UID: خمس محاولات خلال 15 دقيقة.
+  const now = Date.now();
+  const limitRef = db.collection("encounterRedeemAttempts").doc(uid);
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(limitRef);
+    const data = snap.data() ?? {};
+    const started = data.windowStartedAt instanceof Timestamp ? data.windowStartedAt.toMillis() : 0;
+    const active = started > 0 && now - started < 15 * 60 * 1000;
+    const attempts = active ? Number(data.attempts ?? 0) : 0;
+    if (attempts >= 5) {
+      throw new HttpsError("resource-exhausted", "تعذّر التحقق الآن. حاول بعد 15 دقيقة.");
+    }
+    tx.set(limitRef, {
+      windowStartedAt: active ? data.windowStartedAt : Timestamp.fromMillis(now),
+      attempts: attempts + 1,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  });
+
   const codeHash = hashCode(code);
   const q = await db.collection("encounters").where("codeHash", "==", codeHash).limit(1).get();
-  if (q.empty) throw new HttpsError("not-found", "الرمز غير صحيح أو منتهي الصلاحية.");
+  if (q.empty) throw new HttpsError("not-found", "الرمز غير صحيح أو غير متاح.");
   const ref = q.docs[0].ref;
   return db.runTransaction(async tx => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "الرمز غير متاح.");
     const e = snap.data()!;
-    if (e.patientUid !== uid) throw new HttpsError("permission-denied", "هذا الرمز لا يخص حسابك.");
+    if (e.patientUid !== uid) throw new HttpsError("not-found", "الرمز غير صحيح أو غير متاح.");
     if (e.status !== "issued") throw new HttpsError("failed-precondition", "تم استخدام الرمز أو إبطاله مسبقاً.");
     if (!(e.expiresAt instanceof Timestamp) || e.expiresAt.toMillis() <= Date.now()) {
       tx.update(ref, {status:"expired", updatedAt:FieldValue.serverTimestamp()});
-      throw new HttpsError("deadline-exceeded", "انتهت صلاحية الرمز.");
+      throw new HttpsError("not-found", "الرمز غير صحيح أو غير متاح.");
     }
     const bookingRef = db.collection("bookings").doc(e.bookingId);
     const bookingSnap = await tx.get(bookingRef);
