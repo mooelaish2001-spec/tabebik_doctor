@@ -16,7 +16,7 @@ import 'tabibak_firebase.dart';
 //  • أماكن العمل: اختيار مركز مسجّل في طبيبك، أو إضافة مكان جديد ودعوته بواتساب.
 //  • عيانين الليلة: قائمة المرضى + التاريخ المرضي + الفحوصات + آخر مقابلة + ملاحظات الكشف.
 //  • التسجيل: رفع صورة بطاقة المجلس الطبي (إلزامي لغير الموثّقين). الدرجات: أخصائي · استشاري فقط (أُلغيت «مسجّل»).
-//  • المتابعة (Follow-up): كود يُنشأ عند وصول المريض ← يدخله المريض ويرفع الفحوصات ← يراجعها الأخصائي ويضيف فحصاً أو علاجاً
+//  • المتابعة: بعد مقابلة حضورية مكتملة يصدر الطبيب كود إثبات؛ يدخله المريض لربط المتابعة ورفع الفحوصات.
 //    أو يطلب مقابلة عاجلة أو يحوّل لأخصائي آخر — انظر قسم «المتابعة» ونقاط الربط (3) (4) (5).
 //  • البيانات محلية في الذاكرة (DocState) ولا يوجد خادم حقيقي بعد — انظر قسم «نقاط الربط».
 // ═════════════════════════════════════════════════════════════════════════
@@ -1132,13 +1132,11 @@ class Patient {
   Patient(this.id, this.name, this.age, this.female, this.phone, this.time, this.place, this.reason,
       {this.arrived = false, this.status = 0, this.conditions = const [], this.allergies = const [], this.meds = const [], this.surgeries = const [], this.family = '', this.labs = const [], this.last, this.transfusion = '', this.admission = ''});
 
-  /// يبني مريضاً من حجز قادم من تطبيق المريض (Appt.toPlatform هناك) — المفاتيح مطابقة:
-  /// complaint ← reason (بتشتكي من شنو) · conditions/meds/allergies/surgeries/transfusion/admission من الملف الصحي إن وافق المريض على مشاركته.
+  /// يبني بيانات تشغيلية فقط من الحجز. لا تُقرأ الشكوى أو السجلات الطبية من وثيقة الحجز.
+  /// مشاركة البيانات الطبية تحتاج مساراً منفصلاً بموافقة وخادم وصلاحية طبيب موثوقة.
   factory Patient.fromPlatform(int id, Map<String, dynamic> j) {
-    List<String> l(String k) => List<String>.from((j[k] ?? const []) as List);
-    return Patient(id, (j['name'] ?? '') as String, ((j['age'] ?? 0) as num).toInt(), (j['female'] ?? false) as bool, (j['phone'] ?? '') as String, ((j['timeMin'] ?? 0) as num).toInt(), (j['place'] ?? '') as String, (j['complaint'] ?? '') as String,
-        conditions: l('conditions'), allergies: l('allergies'), meds: l('meds'), surgeries: l('surgeries'), transfusion: (j['transfusion'] ?? '') as String, admission: (j['admission'] ?? '') as String)
-      ..fid = (j['id'] ?? '') as String;
+    return Patient(id, (j['name'] ?? '') as String, ((j['age'] ?? 0) as num).toInt(), (j['female'] ?? false) as bool, (j['phone'] ?? '') as String, ((j['timeMin'] ?? 0) as num).toInt(), (j['place'] ?? '') as String, '')
+      ..fid = (j['id'] ?? j['bookingId'] ?? '') as String;
   }
 
   final int id, age, time; // time: دقائق منذ منتصف الليل
@@ -1692,20 +1690,17 @@ class DocState extends ChangeNotifier {
     final today = _iso(DateTime.now());
     final list = [
       for (final b in rows)
-        if (((b['status'] ?? '') == 'مؤكد' || (b['status'] ?? '') == 'مكتمل') && (b['dateIso'] ?? '') == today && ((b['type'] ?? 0) as num).toInt() == 0) b
+        if (((b['status'] ?? '') == 'مؤكد' || (b['status'] ?? '') == 'مكتمل') && (b['dateIso'] ?? '') == today && ((b['type'] ?? 0) as num).toInt() == 0 && (b['centerId'] ?? '').toString().isNotEmpty && (b['doctorLic'] ?? '').toString().isNotEmpty) b
     ]..sort((a, b) => ((a['timeMin'] ?? 0) as num).compareTo((b['timeMin'] ?? 0) as num));
     final old = {for (final p in patients) p.fid: p};
     final out = <Patient>[];
     for (var i = 0; i < list.length; i++) {
       final b = list[i];
       final fid = (b['id'] ?? '') as String;
-      Map<String, dynamic> extra = const {};
-      if (b['sharedHealth'] == true) {
-        try {
-          extra = await Fb.bookingPrivate(fid, 'health') ?? const <String, dynamic>{};
-        } catch (_) {}
-      }
-      final p = Patient.fromPlatform(i + 1, {...b, ...extra});
+      // لا نجلب أي بيانات طبية من مسار الحجز التشغيلي.
+      // لا توجد حالياً خدمة خادمية مكتملة للتحقق من موافقة المريض وربط doctorUid؛
+      // لذلك تبقى الشكوى والملف الصحي غير متاحين هنا بدلاً من تجاوز حدود الصلاحيات.
+      final p = Patient.fromPlatform(i + 1, b);
       final v = b['visit'] is Map ? Map<String, dynamic>.from(b['visit'] as Map) : <String, dynamic>{};
       p.status = v['state'] is num ? (v['state'] as num).toInt() : ((b['status'] ?? '') == 'مكتمل' ? 2 : 0);
       p.arrived = v['arrived'] == true;
@@ -1717,7 +1712,7 @@ class DocState extends ChangeNotifier {
         if (o.status == 1 && p.status == 0) p.status = 1; // جلسة جارية لم تُرفع بعد
       }
       out.add(p);
-      if ((p.arrived || p.status == 1) && p.status < 2) openFollowUp(p); // وصل المريض ← كود المتابعة جاهز
+      // لا ننشئ كوداً لمجرد وصول المريض أو بدء الكشف؛ الكود يثبت مقابلة حضورية مكتملة.
       if (!_bkFirst && !_seenBookings.contains(fid)) {
         note(Icons.event_available_rounded, 'حجز جديد مؤكد', '${p.name} · ${fmtTime(p.time)} · ${p.place}', dest: 1);
       }
@@ -1892,11 +1887,14 @@ class DocState extends ChangeNotifier {
     }
   }
 
-  /// يفتح متابعة لهذه الزيارة ويولّد كودها (إن لم تكن مفتوحة). يُستدعى عند وصول المريض أو بدء الكشف.
-  FollowUp openFollowUp(Patient p) {
+  /// يفتح متابعة بعد استلام رمز حقيقي من Cloud Function؛ لا يولّد التطبيق رموز إثبات محلية.
+  FollowUp openFollowUp(Patient p, {required String code}) {
     final old = fuOf(p);
     if (old != null) return old;
-    final f = FollowUp(_fid(), _fuKey(p), p.name, p.age, p.female, p.phone, p.place, _newCode(), allergies: p.allergies, reason: p.reason)..event(Icons.vpn_key_rounded, 'أُنشئ كود المتابعة');
+    if (code.length != 6 || int.tryParse(code) == null) {
+      throw ArgumentError('A server-issued six-digit encounter code is required.');
+    }
+    final f = FollowUp(_fid(), _fuKey(p), p.name, p.age, p.female, p.phone, p.place, code, allergies: p.allergies, reason: p.reason)..event(Icons.vpn_key_rounded, 'أصدر الخادم كود إثبات المقابلة الحضورية');
     followUps.insert(0, f);
     notifyListeners();
     return f;
@@ -3780,28 +3778,51 @@ class PatientScreen extends StatelessWidget {
   const PatientScreen(this.p, {super.key});
   final Patient p;
 
-  void start(BuildContext c) {
+  Future<void> start(BuildContext c) async {
     final cur = me.inSession;
     if (cur != null && cur != p) {
       snack(c, 'أنهِ كشف ${cur.name} أولاً');
       return;
     }
-    p.status = 1;
-    p.arrived = true;
-    final fu = me.openFollowUp(p);
-    me.pushVisit(p);
-    snack(c, fu.codeLive ? 'بدأ الكشف — ${p.name} · كود المتابعة ${fu.code}' : 'بدأ الكشف — ${p.name}', ok: true);
+    if (p.fid.isEmpty || !Fb.on || Fb.uid == null) {
+      snack(c, 'لا يمكن تسجيل الحضور: لا يوجد حجز سحابي موثوق أو جلسة طبيب فعّالة.');
+      return;
+    }
+    try {
+      await Fb.markEncounterArrived(p.fid);
+      p.status = 1;
+      p.arrived = true;
+      me.refresh();
+      snack(c, 'تم تسجيل حضور المريض وبدء المقابلة الحضورية.', ok: true);
+    } catch (e) {
+      snack(c, 'تعذّر تسجيل الحضور على الخادم. لم يبدأ الكشف: $e');
+    }
   }
 
   Future<void> finish(BuildContext c) async {
     final r = await sheet<(String, String, String)>(c, FinishSheet(p));
     if (r == null) return;
-    p.diagnosis = r.$1;
-    p.plan = r.$2;
-    p.followUp = r.$3;
-    p.status = 2;
-    me.pushVisit(p);
-    if (c.mounted) snack(c, 'تم حفظ الكشف', ok: true);
+    if (p.fid.isEmpty || !Fb.on || Fb.uid == null || p.status != 1 || !p.arrived) {
+      snack(c, 'لا يمكن إنهاء الكشف وإصدار الرمز قبل تسجيل حضور المريض من حجز موثوق.');
+      return;
+    }
+    try {
+      final issued = await Fb.issueEncounterCode(p.fid);
+      final code = (issued['code'] ?? '').toString();
+      if (code.length != 6 || int.tryParse(code) == null) {
+        throw StateError('لم يُرجع الخادم رمز إثبات صالحاً.');
+      }
+      p.diagnosis = r.$1;
+      p.plan = r.$2;
+      p.followUp = r.$3;
+      p.status = 2;
+      p.arrived = true;
+      me.refresh();
+      final follow = me.openFollowUp(p, code: code);
+      if (c.mounted) await go(c, FollowUpScreen(follow));
+    } catch (e) {
+      if (c.mounted) snack(c, 'لم يُنهَ الحجز ولم يصدر كود. تحقق من صلاحية حساب الطبيب واتصال الخادم: $e');
+    }
   }
 
   Future<void> noShow(BuildContext c) async {
@@ -3944,18 +3965,21 @@ class PatientScreen extends StatelessWidget {
     ]);
   }
 
-  /// كود المتابعة وحالتها داخل ملف المريض (يُنشأ تلقائياً عند الوصول أو بدء الكشف).
+  /// كود إثبات المقابلة الحضورية: لا يُنشأ إلا بعد إنهاء الطبيب للكشف، ثم يستخدمه المريض لربط المتابعة.
   Widget followBlock(BuildContext c) {
     final f = me.fuOf(p);
     if (f == null) {
-      final can = p.arrived || p.status > 0;
+      final can = p.status == 2;
       return panel([
         Row(children: [
           tileIcon(Icons.fact_check_rounded, size: 42, color: kTeal, bg: kTealBg),
           gapW(12),
-          Expanded(child: two('متابعة المريض', can ? 'أنشئ كود المتابعة ليرفع المريض فحوصاته' : 'يُنشأ الكود تلقائياً عند وصول المريض')),
+          Expanded(child: two('إثبات المقابلة والمتابعة', can ? 'الكشف مكتمل؛ الكود جاهز للمريض' : 'لا يصدر الكود إلا بعد إنهاء الكشف الحضوري')),
         ]),
-        if (can) ...[gap(12), OutBtn('إنشاء كود المتابعة', icon: Icons.vpn_key_rounded, height: 44, onTap: () => go(c, FollowUpScreen(me.openFollowUp(p))))],
+        if (can) ...[
+          gap(12),
+          Text('انتهت المقابلة. لا يمكن إعادة إنشاء أو استرجاع رمز سبق إصداره؛ استخدم الرمز الذي عُرض عند إنهاء الكشف.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6)),
+        ],
       ]);
     }
     return Tap(
@@ -5014,7 +5038,7 @@ class _FollowUpsState extends State<FollowUpsScreen> {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Icon(Icons.info_outline_rounded, color: kAmber, size: 20),
           gapW(8),
-          Expanded(child: Text('وضع تجريبي: المتابعة غير موصولة بالخادم بعد، فلا يصل الكود إلى تطبيق المريض ولا تعود الصور. (بعد الربط: FOLLOWUP_LIVE=true)', style: t(11.5, w: FontWeight.w600, c: kAmber, h: 1.6))),
+          Expanded(child: Text('هذا الكود لإثبات مقابلة حضورية تمت بالفعل، وليس لبدء علاج عن بُعد. الربط المباشر مع تطبيق المريض ورفع الفحوصات يحتاج تفعيل خدمة الخادم أولاً؛ المزامنة ليست مكتملة في هذه النسخة.', style: t(11.5, w: FontWeight.w600, c: kAmber, h: 1.6))),
         ]),
       );
 
@@ -5099,7 +5123,7 @@ class _FollowUpsState extends State<FollowUpsScreen> {
             body: Column(children: [
               if (!kFollowUpLive) Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 0), child: notLive()),
               if (me.followUps.isEmpty)
-                const Expanded(child: EmptyState(Icons.fact_check_rounded, 'لا توجد متابعات بعد', 'عند وصول المريض يُنشئ التطبيق كود متابعة تلقائياً. أعطه للمريض ليرفع فحوصاته، وتظهر لك هنا.'))
+                const Expanded(child: EmptyState(Icons.fact_check_rounded, 'لا توجد متابعات بعد', 'بعد إكمال الكشف الحضوري وإغلاق الزيارة، يمكنك إصدار كود إثبات المقابلة للمريض. لا يُصدر الكود عند الوصول أو بدء الكشف.'))
               else ...[
                 Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 10), child: AppSearch('ابحث باسم المريض...', controller: ctl, fill: Colors.white, onChanged: (_) => setState(() {}))),
                 FilterChips(labels, sel: chip, onChanged: (v) => setState(() => chip = v)),
@@ -5171,10 +5195,7 @@ class FollowUpScreen extends StatelessWidget {
   }
 
   Future<void> renew(BuildContext c) async {
-    final ok = await confirm(c, 'إصدار كود جديد؟', 'سيبطل الكود الحالي، وعلى المريض استخدام الكود الجديد.', yes: 'كود جديد', no: 'تراجع', danger: false);
-    if (!ok || !c.mounted) return;
-    me.fuRenew(f);
-    snack(c, 'تم إصدار كود جديد', ok: true);
+    snack(c, 'لا يمكن تجديد رمز الإثبات محلياً؛ يلزم إصدار آمن جديد من الخادم.');
   }
 
   Future<void> declineIncoming(BuildContext c) async {
@@ -5285,7 +5306,7 @@ class FollowUpScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(18),
           child: Column(children: [
-            Text('كود المتابعة', style: t(13, w: FontWeight.w600, c: live ? const Color(0xE6FFFFFF) : kGrey)),
+            Text('كود إثبات المقابلة الحضورية', style: t(13, w: FontWeight.w600, c: live ? const Color(0xE6FFFFFF) : kGrey)),
             gap(6),
             Directionality(textDirection: TextDirection.ltr, child: Text(fmtCode(f.code), style: t(40, c: live ? Colors.white : kGrey, h: 1.2))),
             gap(6),
@@ -5304,12 +5325,12 @@ class FollowUpScreen extends StatelessWidget {
                   }, true),
                 ),
                 gapW(8),
-                Expanded(child: codeBtn('عبر واتساب', Icons.chat_rounded, () => openWhatsApp(c, f.phone, 'كود متابعتك في تطبيق «طبيبك»: ${f.code}\nافتح التطبيق ← المتابعة ← أدخل الكود لترفع الفحوصات التي طلبها الطبيب. الكود صالح 24 ساعة ولك وحدك.'), true)),
+                Expanded(child: codeBtn('عبر واتساب', Icons.chat_rounded, () => openWhatsApp(c, f.phone, 'كود إثبات مقابلتك الحضورية في «طبيبك»: ${f.code}\nأدخل الكود في التطبيق لربط متابعة هذه الزيارة ورفع الفحوصات المطلوبة. الكود صالح 24 ساعة ومخصص لك.'), true)),
                 gapW(8),
-                Expanded(child: codeBtn('كود جديد', Icons.refresh_rounded, () => renew(c), true)),
+                const SizedBox.shrink(),
               ])
             else
-              codeBtn('إصدار كود جديد', Icons.refresh_rounded, () => renew(c), false),
+              Text('انتهت صلاحية الرمز؛ يلزم إصدار آمن جديد من الخادم بعد التحقق من الزيارة.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey)),
           ]),
         ),
       ]),

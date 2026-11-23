@@ -1,0 +1,17 @@
+name: Firebase Functions CI
+on:
+  pull_request:
+  push:
+    branches: [main, fix/full-review-2026-11]
+jobs:
+  build-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm --prefix functions install
+      - name: Compile Cloud Functions
+        run: npm --prefix functions run build
