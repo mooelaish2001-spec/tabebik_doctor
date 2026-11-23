@@ -1550,7 +1550,7 @@ class DocState extends ChangeNotifier {
         return 'other'; // هذا الهاتف مسجّل برقم مجلس آخر
       }
       final key = await Fb.doctorKey(lic);
-      if (key.denied) return 'denied';
+      if (key.denied || (key.exists && key.phone.isNotEmpty && key.phone != ph)) return 'denied';
       reset();
       begin(lic, ph);
       if (key.exists) {
