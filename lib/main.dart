@@ -2740,7 +2740,7 @@ class _AuthState extends State<AuthScreen> {
             child: ListView(padding: const EdgeInsets.fromLTRB(24, 22, 24, 16), children: [
               Center(child: Text('دخول الأطباء', style: t(22))),
               gap(4),
-              Center(child: Text('أدخل رقم المجلس ورقم الهاتف، ثم أنشئ مفتاح مرور أو ادخل به. لا توجد رسائل SMS أو OTP.', textAlign: TextAlign.center, style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6))),
+              Center(child: Text('أدخل رقم المجلس ورقم الهاتف، ثم أنشئ مفتاح مرور أو ادخل به. لا نرسل رسائل SMS.', textAlign: TextAlign.center, style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6))),
               AppField('رقم المجلس الطبي', controller: cn, hint: 'مثال: 12345', icon: Icons.badge_outlined, type: TextInputType.number, ltr: true, maxLength: 8, fmt: [digitsFmt], error: eCouncil, onChanged: (v) {
                 if (eCouncil != null) setState(() => eCouncil = null);
                 onCouncil(v);
