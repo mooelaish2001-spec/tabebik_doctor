@@ -12,8 +12,13 @@ Before real medical data is stored, implement client-side authenticated encrypti
 
 Deployment gates: schema migration; trusted claims provisioning; explicit patient consent and doctor assignment; rules for separated schema; Emulator tests for unauthenticated, patient owner, assigned/unrelated doctor, center manager, reception and admin; security review. Do not deploy until all gates pass.
 
-## 2026-11 schema migration work (client API stage)
-- The shared Firebase helper now has an operational-booking allowlist. It rejects unknown keys (including complaint and health payloads) and requires the signed-in UID to match patientUid.
-- A separate medical-private write API requires an authenticated patient, explicit consent flag, and doctor UID; it stores the medical payload under bookings/{bookingId}/private/medical with patientUid/doctorUid metadata.
-- A revocation-request helper writes a patient-doctor grant revocation request.
-- IMPORTANT: these client helpers are preparatory only. Current Firestore rules intentionally deny booking/private/grant writes, and the main.dart booking flows still need to be migrated away from direct Firestore writes. Do not deploy or treat this as production-ready until backend authorization, consent grant lifecycle, encryption, rules and emulator tests are completed.
+## 2026-11 backend integration stage
+- The patient app now creates operational bookings through the `createPatientBooking` callable rather than direct Firestore writes. The server sets `patientUid`, resolves the verified doctor's Firebase UID, and validates the approved center/membership.
+- The doctor app now requests its booking inbox through `listDoctorBookings`; attendance and visit completion use `markEncounterArrived` and `issueEncounterCode`.
+- Patient booking status refresh and linked-visit list use `listPatientBookings` and `listPatientFollowUps`. The encounter code is one-time, expires after 24 hours, is stored only as a peppered hash, and redemption is rate-limited.
+- The patient app's Firebase Auth identity is currently anonymous. It gives a Firebase UID for booking ownership but does not verify the entered phone number and may be lost if app data is cleared or the app is reinstalled.
+- The center Flutter UI still uses local/demo state and is not yet connected to its callable booking APIs or a trusted Firebase Auth session.
+- The doctor app's clinical follow-up actions (exam/treatment/referral and file exchange) remain local UI state. The patient follow-up screen currently lists linked visits only.
+- Medical profile fields remain local and are not written to the booking document. No encrypted medical record sharing, consent grant lifecycle, key management or medical-file upload has been deployed.
+- Firestore and Storage rules remain intentionally fail-closed. Do not loosen them. Functions source has not been deployed, the doctor repository's Firebase project binding is unconfirmed, and `ENCOUNTER_CODE_PEPPER` plus trusted doctor claims must be provisioned before any live test.
+- These are staged source changes, not a production-ready deployment. Complete schema migration, custom-claim provisioning, consent lifecycle, encryption/key management, Firebase Emulator authorization tests and security review before storing real medical data.
