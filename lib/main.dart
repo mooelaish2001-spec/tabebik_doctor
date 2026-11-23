@@ -2496,163 +2496,40 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthState extends State<AuthScreen> {
-  final cn = TextEditingController(), ph = TextEditingController();
+  final cn = TextEditingController();
+  final ph = TextEditingController();
   final passkey = PasskeyAuthService(app: 'tabebik_doctor');
   bool agree = false;
   bool busy = false;
   String? eCouncil, ePhone, eAgree;
 
-  // المراكز التي سجّلت رقم المجلس هذا + قرارات الأخصائي عليها
-  List<CenterTerms> invites = [];
-  final decisions = <String, bool>{};
-  bool looking = false;
-  String _looked = '';
-  Timer? _debounce;
-
   @override
   void dispose() {
-    _debounce?.cancel();
     cn.dispose();
     ph.dispose();
     passkey.close();
     super.dispose();
   }
 
-  /// عند كتابة رقم مجلس صالح نبحث عن المراكز التي سجّلته (بعد توقف قصير عن الكتابة).
-  void onCouncil(String v) {
-    final c = normLic(v);
-    _debounce?.cancel();
-    if (c == null) {
-      if (invites.isNotEmpty || _looked.isNotEmpty || looking) {
-        setState(() {
-          invites = [];
-          decisions.clear();
-          _looked = '';
-          looking = false;
-        });
-      }
-      return;
-    }
-    if (c == _looked) return;
-    _debounce = Timer(const Duration(milliseconds: 450), () => _lookup(c));
-  }
-
-  Future<void> _lookup(String c) async {
-    if (!mounted) return;
-    setState(() => looking = true);
-    var r = <CenterTerms>[];
-    try {
-      r = await invitesFor(c);
-    } catch (_) {}
-    if (!mounted || normLic(cn.text) != c) return; // الرقم تغيّر أثناء البحث
-    setState(() {
-      looking = false;
-      _looked = c;
-      invites = r;
-      decisions.removeWhere((k, _) => !r.any((x) => x.center.id == k));
-    });
-  }
-
-  void decide(String id, bool v) => setState(() {
-        if (decisions[id] == v) {
-          decisions.remove(id);
-        } else {
-          decisions[id] = v;
-        }
-      });
-
-  String _days(Set<int> d) {
-    final l = d.toList()..sort();
-    if (l.isEmpty) return '—';
-    if (l.length == 1) return kDays[l.first];
-    return l.last - l.first == l.length - 1 ? '${kDays[l.first]} - ${kDays[l.last]}' : l.map((i) => kDays[i]).join('، ');
-  }
-
-  Widget choice(String text, bool on, IconData icon, Color c, VoidCallback tap) => Tap(
-        onTap: tap,
-        child: Container(
-          height: 42,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: on ? c : Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: on ? c : kLine, width: 1.5)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18, color: on ? Colors.white : c), gapW(5), Text(text, style: t(13.5, c: on ? Colors.white : c))]),
-        ),
-      );
-
-  Widget inviteCard(CenterTerms x) {
-    final id = x.center.id;
-    final d = decisions[id];
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: d == true ? kGreen : kLine, width: 1.5)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(x.center.name, style: t(14.5))),
-          if (d == true) pillOk('تم القبول') else if (d == false) pillWarn('مرفوض'),
-        ]),
-        if (x.center.address.isNotEmpty || x.center.area.isNotEmpty) Text(x.center.address.isNotEmpty ? x.center.address : x.center.area, style: t(11.5, w: FontWeight.w500, c: kGrey)),
-        gap(6),
-        Text('${_days(x.days)} · ${fmtTime(x.from)} - ${fmtTime(x.to)}', style: t(12, w: FontWeight.w600, c: kSub)),
-        Text(x.fee > 0 ? 'سعر الكشف ${money(x.fee)} ج.س' : 'سعر الكشف: يُتفق عليه مع المركز', style: t(12, w: FontWeight.w600, c: kSub)),
-        gap(10),
-        Row(children: [
-          Expanded(child: choice('قبول', d == true, Icons.check_rounded, kGreenDk, () => decide(id, true))),
-          gapW(8),
-          Expanded(child: choice('رفض', d == false, Icons.close_rounded, kRed, () => decide(id, false))),
-        ]),
-      ]),
-    );
-  }
-
-  /// يظهر تحت رقم المجلس بمجرد كتابته: المراكز التي سجّلتك به، لتقبلها أو ترفضها قبل أن تكمل.
-  Widget invitesBox() {
-    if (looking) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Row(children: [
-          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kRed)),
-          gapW(8),
-          Text('نبحث عن المراكز التي سجّلتك...', style: t(12, w: FontWeight.w500, c: kGrey)),
-        ]),
-      );
-    }
-    if (invites.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: kTint, borderRadius: BorderRadius.circular(20)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.local_hospital_rounded, color: kRed, size: 20),
-          gapW(8),
-          Expanded(child: Text(invites.length == 1 ? 'مركز سجّلك برقم المجلس هذا' : '${invites.length} مراكز سجّلتك برقم المجلس هذا', style: t(14.5, c: kRed))),
-        ]),
-        gap(4),
-        Text('اقبل أو ارفض كل مركز الآن، أو قرّر لاحقاً من «أماكن عملي». وبعد التحقق من هاتفك تراجع بياناتك التي سجّلها المركز وتعدّلها كما تشاء.', style: t(11.5, w: FontWeight.w500, c: kSub  Future<void> send() async {
+  Future<void> send() async {
     if (busy) return;
-    final c = normLic(cn.text);
-    final p = normPhone(ph.text);
-    String? ep = p == null ? 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)' : null;
-    if (p != null && c != null && !Fb.on) {
-      final rec = platform.find(c);
-      if (me.registered && me.council == c && me.phone != p) {
-        ep = 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم لتغيير الرقم.';
-      } else if (rec != null && rec.phone != p) {
-        ep = rec.claimed
-            ? 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم لتغيير الرقم.'
-            : 'رقم المجلس هذا سجّله مركز برقم هاتف مختلف. تواصل مع الدعم لمطابقة هويتك.';
-      }
-    }
+    final council = normLic(cn.text);
+    final phone = normPhone(ph.text);
     setState(() {
-      eCouncil = c == null ? 'أدخل رقم المجلس الطبي (من 3 إلى 8 أرقام)' : null;
-      ePhone = ep;
+      eCouncil = council == null ? 'أدخل رقم المجلس الطبي (من 3 إلى 8 أرقام)' : null;
+      ePhone = phone == null ? 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)' : null;
       eAgree = agree ? null : 'يجب الموافقة على الشروط للمتابعة';
     });
     if (eCouncil != null || ePhone != null || eAgree != null) return;
 
-    if (me.registered && me.council != c) {
-      final ok = await confirm(context, 'تبديل الحساب على هذا الجهاز؟', 'هذا الجهاز مسجَّل عليه ${me.dn}. سيُحفظ حسابه ويمكنه العودة إليه بمفتاح مروره، ثم تدخل أنت بحسابك.', yes: 'متابعة', no: 'إلغاء', danger: false);
-      if (!ok || !mounted) return;
+    if (!Fb.on) {
+      final rec = platform.find(council!);
+      if (me.registered && me.council == council && me.phone != phone) {
+        return snack(context, 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم لتغيير الرقم.');
+      }
+      if (rec != null && rec.phone != phone) {
+        return snack(context, 'رقم المجلس هذا مرتبط برقم هاتف آخر. تواصل مع الدعم لمطابقة هويتك.');
+      }
     }
 
     setState(() => busy = true);
@@ -2663,46 +2540,49 @@ class _AuthState extends State<AuthScreen> {
         } on PasskeyAuthException catch (e) {
           if (e.code != 'passkey-not-found') rethrow;
           await passkey.registerAccount(
-            displayName: 'طبيب ${c!}',
-            phone: p!,
-            professionalId: c,
+            displayName: 'طبيب ${council!}',
+            phone: phone!,
+            professionalId: council,
           );
         }
+
         final savedCouncil = (passkey.accountData['professionalId'] ?? '').toString();
         final savedPhone = (passkey.accountData['phone'] ?? '').toString();
-        if (savedCouncil != c || savedPhone != p) {
+        if (savedCouncil != council || savedPhone != phone) {
           await Fb.signOut();
           throw const PasskeyAuthException('مفتاح المرور الذي اخترته مرتبط برقم مجلس أو هاتف مختلف.');
         }
-        final result = await me.afterSignIn(c!, p!);
+
+        final result = await me.afterSignIn(council!, phone!);
         if (!mounted) return;
         switch (result) {
           case 'existing':
-            me.takeDecisions(decisions);
-            snack(context, 'تم الدخول بمفتاح المرور، أهلاً بك ${kBoss}', ok: true);
+            snack(context, 'تم الدخول بمفتاح المرور', ok: true);
             home(context);
             return;
           case 'claim':
           case 'new':
-            me.takeDecisions(decisions);
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)),
+            );
             return;
           case 'denied':
             await Fb.signOut();
-            throw const PasskeyAuthException('رقم المجلس مرتبط ببيانات مهنية أخرى. تواصل مع الدعم لمراجعة الهوية.');
+            throw const PasskeyAuthException('رقم المجلس مرتبط بملف مهني آخر. تواصل مع الدعم لمراجعة الهوية.');
           case 'other':
             await Fb.signOut();
-            throw const PasskeyAuthException('هذا الحساب مرتبط برقم مجلس مختلف.');
+            throw const PasskeyAuthException('مفتاح المرور هذا مرتبط برقم مجلس مختلف.');
           default:
             await Fb.signOut();
             throw const PasskeyAuthException('تعذر تحميل الملف المهني. حاول مجدداً.');
         }
       }
 
-      // Local demonstration mode: no SMS or verification-code step.
-      final lic = c!, phone = p!;
+      // وضع العرض المحلي فقط: لا يوجد رمز تحقق ولا إرسال رسائل.
+      final lic = council!, contact = phone!;
       if (me.registered && me.council == lic) {
-        me.phone = phone;
+        me.phone = contact;
         snack(context, 'تم الدخول', ok: true);
         home(context);
         return;
@@ -2711,21 +2591,30 @@ class _AuthState extends State<AuthScreen> {
       final rec = platform.find(lic);
       if (rec != null && rec.claimed && rec.saved != null) {
         me.restore(rec.saved!);
-        me.phone = phone;
+        me.phone = contact;
         snack(context, 'تم استعادة الحساب', ok: true);
         home(context);
         return;
       }
       me.reset();
-      me.begin(lic, phone);
+      me.begin(lic, contact);
       if (rec != null && !rec.claimed) {
         me.claimFrom(rec);
-        me.takeDecisions(decisions);
-        snack(context, 'وجدنا الملف الذي سجّله المركز — راجع بياناتك وأكمل', ok: true);
+        snack(context, 'وجدنا ملفاً سجّله المركز — راجع بياناتك وأكمل', ok: true);
       }
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)),
+      );
     } catch (e) {
-      if (mounted) snack(context, e is PasskeyAuthException ? e.message : 'تعذر إكمال الدخول. تحقق من قفل الجهاز والإنترنت.');
+      if (mounted) {
+        snack(
+          context,
+          e is PasskeyAuthException
+              ? e.message
+              : 'تعذر إكمال الدخول. تحقق من قفل الجهاز والإنترنت.',
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -2737,33 +2626,78 @@ class _AuthState extends State<AuthScreen> {
         body: Column(children: [
           authHeader(height: 250),
           Expanded(
-            child: ListView(padding: const EdgeInsets.fromLTRB(24, 22, 24, 16), children: [
-              Center(child: Text('دخول الأطباء', style: t(22))),
-              gap(4),
-              Center(child: Text('أدخل رقم المجلس ورقم الهاتف، ثم أنشئ مفتاح مرور أو ادخل به. لا نرسل رسائل SMS.', textAlign: TextAlign.center, style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6))),
-              AppField('رقم المجلس الطبي', controller: cn, hint: 'مثال: 12345', icon: Icons.badge_outlined, type: TextInputType.number, ltr: true, maxLength: 8, fmt: [digitsFmt], error: eCouncil, onChanged: (v) {
-                if (eCouncil != null) setState(() => eCouncil = null);
-                onCouncil(v);
-              }),
-              invitesBox(),
-              AppField('رقم الهاتف', controller: ph, hint: '9XX XXX XXX', icon: Icons.phone_outlined, type: TextInputType.phone, ltr: true, prefixText: '+249  ', fmt: [digitsFmt, LengthLimitingTextInputFormatter(14)], error: ePhone, onChanged: (_) {
-                if (ePhone != null) setState(() => ePhone = null);
-              }),
-              gap(8),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.info_outline_rounded, color: kGrey, size: 16),
-                const SizedBox(width: 6),
-                Expanded(child: Text('نراجع رقم المجلس الطبي وصورة بطاقتك (سترفعها في الخطوة التالية) لتوثيق حسابك. يمكنك إعداد ملفك أثناء المراجعة، ويبدأ ظهورك للمرضى بعد التوثيق.', style: t(11.5, w: FontWeight.w500, c: kGrey, h: 1.6))),
-              ]),
-              gap(16),
-              checkRow(agree, 'أوافق على الشروط وسياسة الخصوصية وسرّية بيانات المرضى', () => setState(() {
-                    agree = !agree;
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
+              children: [
+                Center(child: Text('دخول الأطباء', style: t(22))),
+                gap(4),
+                Center(
+                  child: Text(
+                    'أدخل رقم المجلس ورقم الهاتف، ثم أنشئ مفتاح مرور أو ادخل به. لا نرسل رسائل SMS.',
+                    textAlign: TextAlign.center,
+                    style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6),
+                  ),
+                ),
+                AppField(
+                  'رقم المجلس الطبي',
+                  controller: cn,
+                  hint: 'مثال: 12345',
+                  icon: Icons.badge_outlined,
+                  type: TextInputType.number,
+                  ltr: true,
+                  maxLength: 8,
+                  fmt: [digitsFmt],
+                  error: eCouncil,
+                ),
+                gap(10),
+                AppField(
+                  'رقم الهاتف للتواصل',
+                  controller: ph,
+                  hint: '9XX XXX XXX',
+                  icon: Icons.phone_outlined,
+                  type: TextInputType.phone,
+                  ltr: true,
+                  prefixText: '+249  ',
+                  fmt: [digitsFmt, LengthLimitingTextInputFormatter(14)],
+                  error: ePhone,
+                ),
+                gap(12),
+                CheckboxListTile(
+                  value: agree,
+                  onChanged: (v) => setState(() {
+                    agree = v == true;
                     eAgree = null;
-                  }), err: eAgree != null, onMore: () => go(context, const TermsScreen())),
-              errText(eAgree),
-              gap(20),
-              RedButton(busy ? 'جارٍ التحقق...' : 'الدخول / إنشاء حساب بمفتاح المرور', arrow: true, onTap: busy ? () {} : send),
-            ]),
+                  }),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text('أوافق على شروط الاستخدام وسياسة الخصوصية', style: t(12, w: FontWeight.w600)),
+                ),
+                if (eAgree != null)
+                  Text(eAgree!, style: t(11.5, c: kRed)),
+                gap(16),
+                RedButton(
+                  busy ? 'جارٍ التحقق...' : 'الدخول / إنشاء حساب بمفتاح المرور',
+                  arrow: true,
+                  loading: busy,
+                  onTap: busy ? () {} : send,
+                ),
+                gap(14),
+                Center(
+                  child: Text(
+                    'يظل الملف المهني قيد المراجعة حتى اعتماد بيانات المجلس والترخيص.',
+                    textAlign: TextAlign.center,
+                    style: t(11.5, w: FontWeight.w500, c: kGrey, h: 1.6),
+                  ),
+                ),
+                gap(12),
+                Tap(
+                  onTap: () => go(context, const TermsScreen()),
+                  child: Center(
+                    child: Text('قراءة الشروط وسياسة الخصوصية', style: t(12, c: kRed)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ]),
       );
