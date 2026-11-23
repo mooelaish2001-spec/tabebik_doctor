@@ -308,3 +308,20 @@ export const listPatientFollowUps = onCall({enforceAppCheck:true}, async (reques
   rows.sort((a,b) => b.createdAt - a.createdAt);
   return {followUps:rows};
 });
+
+
+/** قائمة حجوزات المريض التشغيلية فقط، معزولة حسب Firebase UID. */
+export const listPatientBookings = onCall({enforceAppCheck:true}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const uid = request.auth.uid as string;
+  const snap = await db.collection("bookings").where("patientUid", "==", uid).limit(100).get();
+  const keys = ["type", "svc", "centerId", "doctorLic", "doctorUid", "name", "phone", "age", "female",
+    "title", "when", "dateIso", "timeMin", "place", "price", "status", "visit", "encounterIssued"];
+  const bookings = await Promise.all(snap.docs.map(async doc => {
+    const data = doc.data();
+    const row: Record<string, unknown> = {id:doc.id, bookingId:doc.id};
+    for (const key of keys) if (data[key] !== undefined) row[key] = data[key];
+    return row;
+  }));
+  return {bookings};
+});
