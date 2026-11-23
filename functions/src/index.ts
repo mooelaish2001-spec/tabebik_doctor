@@ -34,12 +34,14 @@ export const markEncounterArrived = onCall({enforceAppCheck:true}, async (reques
   if (!validId(bookingId)) throw new HttpsError("invalid-argument", "معرّف الحجز غير صالح.");
   const doctorLic = request.auth!.token.doctorLic;
   const ref = db.collection("bookings").doc(bookingId);
+  const doctorRef = doctorLic ? db.collection("doctors").doc(String(doctorLic)) : null;
   await db.runTransaction(async tx => {
     const snap = await tx.get(ref);
+    const doctorSnap = doctorRef ? await tx.get(doctorRef) : null;
     if (!snap.exists) throw new HttpsError("not-found", "الحجز غير موجود.");
     const b = snap.data()!;
-    if (!doctorLic || (b.doctorUid !== uid && b.doctorLic !== doctorLic)) {
-      throw new HttpsError("permission-denied", "هذا الحجز غير مرتبط بحساب الطبيب.");
+    if (!doctorLic || b.doctorLic !== doctorLic || !doctorSnap?.exists || doctorSnap.data()?.uid !== uid) {
+      throw new HttpsError("permission-denied", "هوية الطبيب أو ارتباطه بالحجز غير موثّق.");
     }
     if (b.status !== "مؤكد" || Number(b.type ?? 0) !== 0) {
       throw new HttpsError("failed-precondition", "الحجز ليس موعد كشف طبيب مؤكداً.");
@@ -49,6 +51,7 @@ export const markEncounterArrived = onCall({enforceAppCheck:true}, async (reques
       throw new HttpsError("failed-precondition", "لا يمكن بدء كشف مكتمل أو ملغي.");
     }
     tx.set(ref, {
+      doctorUid: uid,
       visit: {state: 1, arrived: true, arrivedAt: FieldValue.serverTimestamp()},
       updatedAt: FieldValue.serverTimestamp()
     }, {merge:true});
@@ -67,6 +70,7 @@ export const issueEncounterCode = onCall({secrets:[pepper], enforceAppCheck:true
   const doctorLic = request.auth!.token.doctorLic;
   if (!doctorLic) throw new HttpsError("permission-denied", "حساب الطبيب غير موثّق على الخادم.");
 
+  const doctorRef = db.collection("doctors").doc(String(doctorLic));
   const bookingRef = db.collection("bookings").doc(bookingId);
   const encounterRef = db.collection("encounters").doc(bookingId);
   const now = Date.now();
@@ -76,10 +80,11 @@ export const issueEncounterCode = onCall({secrets:[pepper], enforceAppCheck:true
   await db.runTransaction(async tx => {
     const bookingSnap = await tx.get(bookingRef);
     const encounterSnap = await tx.get(encounterRef);
+    const doctorSnap = await tx.get(doctorRef);
     if (!bookingSnap.exists) throw new HttpsError("not-found", "الحجز غير موجود.");
     const booking = bookingSnap.data()!;
-    if (booking.doctorUid !== uid && booking.doctorLic !== doctorLic) {
-      throw new HttpsError("permission-denied", "هذا الحجز غير مرتبط بحساب الطبيب.");
+    if (booking.doctorUid !== uid || booking.doctorLic !== doctorLic || !doctorSnap.exists || doctorSnap.data()?.uid !== uid) {
+      throw new HttpsError("permission-denied", "هوية الطبيب أو ارتباطه بالحجز غير موثّق.");
     }
     if (booking.status !== "مؤكد" || booking.visit?.state !== 1 || booking.visit?.arrived !== true) {
       throw new HttpsError("failed-precondition", "سجّل حضور المريض وابدأ الكشف قبل إنهائه.");
