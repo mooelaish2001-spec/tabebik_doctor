@@ -20,6 +20,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -51,11 +53,34 @@ class Fb {
     if (!const bool.fromEnvironment('FIREBASE', defaultValue: true)) return;
     try {
       await Firebase.initializeApp();
+      try {
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: AndroidProvider.playIntegrity,
+        );
+      } catch (_) {
+        // Callable endpoints still enforce App Check; failures must remain visible
+        // when the callable is attempted rather than falling back to local writes.
+      }
       on = true;
     } catch (e) {
       initError = '$e';
       on = false;
     }
+  }
+
+  static FirebaseFunctions get _functions => FirebaseFunctions.instance;
+
+  /// يثبت حضور المريض عبر خادم موثوق؛ لا نحدّث الحجز مباشرة من العميل.
+  static Future<void> markEncounterArrived(String bookingId) async {
+    if (!on || uid == null) throw StateError('جلسة Firebase للطبيب غير متاحة.');
+    await _functions.httpsCallable('markEncounterArrived').call({'bookingId': bookingId});
+  }
+
+  /// ينهي المقابلة ويصدر رمزاً أحادي الاستخدام من الخادم.
+  static Future<Map<String, dynamic>> issueEncounterCode(String bookingId) async {
+    if (!on || uid == null) throw StateError('جلسة Firebase للطبيب غير متاحة.');
+    final result = await _functions.httpsCallable('issueEncounterCode').call({'bookingId': bookingId});
+    return Map<String, dynamic>.from(result.data as Map);
   }
 
   // ───────────────────────── تحويلات ─────────────────────────
