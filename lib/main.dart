@@ -5195,10 +5195,7 @@ class FollowUpScreen extends StatelessWidget {
   }
 
   Future<void> renew(BuildContext c) async {
-    final ok = await confirm(c, 'إصدار كود جديد؟', 'سيبطل الكود الحالي، وعلى المريض استخدام الكود الجديد.', yes: 'كود جديد', no: 'تراجع', danger: false);
-    if (!ok || !c.mounted) return;
-    me.fuRenew(f);
-    snack(c, 'تم إصدار كود جديد', ok: true);
+    snack(c, 'لا يمكن تجديد رمز الإثبات محلياً. إذا انتهت صلاحيته، يلزم إصدار آمن جديد من الخادم بعد التحقق من الزيارة.');
   }
 
   Future<void> declineIncoming(BuildContext c) async {
@@ -5330,10 +5327,10 @@ class FollowUpScreen extends StatelessWidget {
                 gapW(8),
                 Expanded(child: codeBtn('عبر واتساب', Icons.chat_rounded, () => openWhatsApp(c, f.phone, 'كود إثبات مقابلتك الحضورية في «طبيبك»: ${f.code}\nأدخل الكود في التطبيق لربط متابعة هذه الزيارة ورفع الفحوصات المطلوبة. الكود صالح 24 ساعة ومخصص لك.'), true)),
                 gapW(8),
-                Expanded(child: codeBtn('كود جديد', Icons.refresh_rounded, () => renew(c), true)),
+                const SizedBox.shrink(),
               ])
             else
-              codeBtn('إصدار كود جديد', Icons.refresh_rounded, () => renew(c), false),
+              Text('انتهت صلاحية الرمز؛ لا تُنشئ رمزاً بديلاً من التطبيق. يلزم إجراء إصدار آمن جديد من الخادم.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey)),
           ]),
         ),
       ]),
