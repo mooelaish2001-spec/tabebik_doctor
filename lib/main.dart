@@ -2699,7 +2699,7 @@ class _AuthState extends State<AuthScreen> {
         }
       }
 
-      // Local demonstration mode: no OTP and no displayed test code.
+      // Local demonstration mode: no SMS or verification-code step.
       final lic = c!, phone = p!;
       if (me.registered && me.council == lic) {
         me.phone = phone;
