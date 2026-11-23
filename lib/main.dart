@@ -5888,9 +5888,7 @@ class _ReferState extends State<ReferScreen> {
       p.arrived = true;
       me.refresh();
       final follow = me.openFollowUp(p, code: code);
-      if (c.mounted) {
-        await go(c, FollowUpScreen(follow));
-      }
+      if (c.mounted) await go(c, FollowUpScreen(follow));
     } catch (e) {
       if (c.mounted) snack(c, 'لم يُنهَ الحجز ولم يصدر كود. تحقق من صلاحية حساب الطبيب واتصال الخادم: $e');
     }
@@ -11968,9 +11966,7 @@ class _ReferState extends State<ReferScreen> {
       p.arrived = true;
       me.refresh();
       final follow = me.openFollowUp(p, code: code);
-      if (c.mounted) {
-        await go(c, FollowUpScreen(follow));
-      }
+      if (c.mounted) await go(c, FollowUpScreen(follow));
     } catch (e) {
       if (c.mounted) snack(c, 'لم يُنهَ الحجز ولم يصدر كود. تحقق من صلاحية حساب الطبيب واتصال الخادم: $e');
     }
