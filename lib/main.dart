@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'tabibak_firebase.dart';
+import 'passkey_auth_service.dart';
 
 // ═════════════════════════════════════════════════════════════════════════
 //  طبيبك للأطباء — تطبيق الأخصائي
@@ -863,9 +864,6 @@ final otp = OtpService();
 // ═════════════════════════════════════════════════════════════════════════
 /// true = حساب تجريبي معبّأ بأماكن عمل ومرضى الليلة. false = حساب جديد فارغ.
 const kDemoData = bool.fromEnvironment('DEMO_DATA', defaultValue: true); // للإنتاج: --dart-define=DEMO_DATA=false
-
-/// يعرض رمز التحقق على الشاشة (لا SMS فعلية في هذه النسخة). للإنتاج: --dart-define=DEMO_OTP=false
-const kDemoOtp = true; // اختبار فقط: رمز عشوائي محلي يظهر على الشاشة، بلا SMS أو تحقق هاتفي.
 
 /// أزرار «محاكاة» لقرارات الطرف الآخر (تأكيد المركز، توثيق الحساب). للإنتاج: --dart-define=SIMULATE=false
 const kSimulate = bool.fromEnvironment('SIMULATE', defaultValue: true);
@@ -2544,7 +2542,9 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthState extends State<AuthScreen> {
   final cn = TextEditingController(), ph = TextEditingController();
+  final passkey = PasskeyAuthService(app: 'tabebik_doctor');
   bool agree = false;
+  bool busy = false;
   String? eCouncil, ePhone, eAgree;
 
   // المراكز التي سجّلت رقم المجلس هذا + قرارات الأخصائي عليها
@@ -2559,6 +2559,7 @@ class _AuthState extends State<AuthScreen> {
     _debounce?.cancel();
     cn.dispose();
     ph.dispose();
+    passkey.close();
     super.dispose();
   }
 
@@ -2672,25 +2673,19 @@ class _AuthState extends State<AuthScreen> {
           Expanded(child: Text(invites.length == 1 ? 'مركز سجّلك برقم المجلس هذا' : '${invites.length} مراكز سجّلتك برقم المجلس هذا', style: t(14.5, c: kRed))),
         ]),
         gap(4),
-        Text('اقبل أو ارفض كل مركز الآن، أو قرّر لاحقاً من «أماكن عملي». وبعد التحقق من هاتفك تراجع بياناتك التي سجّلها المركز وتعدّلها كما تشاء.', style: t(11.5, w: FontWeight.w500, c: kSub, h: 1.6)),
-        for (final x in invites) inviteCard(x),
-      ]),
-    );
-  }
-
-  Future<void> send() async {
+        Text('اقبل أو ارفض كل مركز الآن، أو قرّر لاحقاً من «أماكن عملي». وبعد التحقق من هاتفك تراجع بياناتك التي سجّلها المركز وتعدّلها كما تشاء.', style: t(11.5, w: FontWeight.w500, c: kSub  Future<void> send() async {
+    if (busy) return;
     final c = normLic(cn.text);
     final p = normPhone(ph.text);
     String? ep = p == null ? 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)' : null;
-    if (p != null && c != null) {
-      final rec = Fb.on ? null : platform.find(c); // مع Firebase لا نكشف حالة الرقم قبل التحقق بالهاتف
+    if (p != null && c != null && !Fb.on) {
+      final rec = platform.find(c);
       if (me.registered && me.council == c && me.phone != p) {
         ep = 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم لتغيير الرقم.';
       } else if (rec != null && rec.phone != p) {
-        // ملاحظة: في الإنتاج لا يكشف الخادم هذا قبل رمز التحقق (منعاً لتعداد الأرقام)؛ نوضّحه هنا لأنها نسخة تجريبية.
         ep = rec.claimed
             ? 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم لتغيير الرقم.'
-            : 'رقم المجلس هذا سجّله مركز برقم هاتف مختلف عن رقمك. تواصل مع الدعم لمطابقة هويتك.';
+            : 'رقم المجلس هذا سجّله مركز برقم هاتف مختلف. تواصل مع الدعم لمطابقة هويتك.';
       }
     }
     setState(() {
@@ -2699,12 +2694,89 @@ class _AuthState extends State<AuthScreen> {
       eAgree = agree ? null : 'يجب الموافقة على الشروط للمتابعة';
     });
     if (eCouncil != null || ePhone != null || eAgree != null) return;
-    // الجهاز عليه حساب طبيب آخر: لا نستبدله بصمت.
+
     if (me.registered && me.council != c) {
-      final ok = await confirm(context, 'تبديل الحساب على هذا الجهاز؟', 'هذا الجهاز مسجَّل عليه ${me.dn}. سيُحفظ حسابه ويمكنه العودة إليه بنفس رقم المجلس وهاتفه، ثم تدخل أنت بحسابك.', yes: 'متابعة', no: 'إلغاء', danger: false);
+      final ok = await confirm(context, 'تبديل الحساب على هذا الجهاز؟', 'هذا الجهاز مسجَّل عليه ${me.dn}. سيُحفظ حسابه ويمكنه العودة إليه بمفتاح مروره، ثم تدخل أنت بحسابك.', yes: 'متابعة', no: 'إلغاء', danger: false);
       if (!ok || !mounted) return;
     }
-    go(context, OtpScreen(p!, c!, decisions: Map<String, bool>.from(decisions)));
+
+    setState(() => busy = true);
+    try {
+      if (Fb.on) {
+        try {
+          await passkey.signIn();
+        } on PasskeyAuthException catch (e) {
+          if (e.code != 'passkey-not-found') rethrow;
+          await passkey.registerAccount(
+            displayName: 'طبيب ${c!}',
+            phone: p!,
+            professionalId: c,
+          );
+        }
+        final savedCouncil = (passkey.accountData['professionalId'] ?? '').toString();
+        final savedPhone = (passkey.accountData['phone'] ?? '').toString();
+        if (savedCouncil != c || savedPhone != p) {
+          await Fb.signOut();
+          throw const PasskeyAuthException('مفتاح المرور الذي اخترته مرتبط برقم مجلس أو هاتف مختلف.');
+        }
+        final result = await me.afterSignIn(c!, p!);
+        if (!mounted) return;
+        switch (result) {
+          case 'existing':
+            me.takeDecisions(decisions);
+            snack(context, 'تم الدخول بمفتاح المرور، أهلاً بك ${kBoss}', ok: true);
+            home(context);
+            return;
+          case 'claim':
+          case 'new':
+            me.takeDecisions(decisions);
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
+            return;
+          case 'denied':
+            await Fb.signOut();
+            throw const PasskeyAuthException('رقم المجلس مرتبط ببيانات مهنية أخرى. تواصل مع الدعم لمراجعة الهوية.');
+          case 'other':
+            await Fb.signOut();
+            throw const PasskeyAuthException('هذا الحساب مرتبط برقم مجلس مختلف.');
+          default:
+            await Fb.signOut();
+            throw const PasskeyAuthException('تعذر تحميل الملف المهني. حاول مجدداً.');
+        }
+      }
+
+      // Local demonstration mode: no OTP and no displayed test code.
+      final lic = c!, phone = p!;
+      if (me.registered && me.council == lic) {
+        me.phone = phone;
+        snack(context, 'تم الدخول', ok: true);
+        home(context);
+        return;
+      }
+      platform.saveAccount(me);
+      final rec = platform.find(lic);
+      if (rec != null && rec.claimed && rec.saved != null) {
+        me.restore(rec.saved!);
+        me.phone = phone;
+        snack(context, 'تم استعادة الحساب', ok: true);
+        home(context);
+        return;
+      }
+      me.reset();
+      me.begin(lic, phone);
+      if (rec != null && !rec.claimed) {
+        me.claimFrom(rec);
+        me.takeDecisions(decisions);
+        snack(context, 'وجدنا الملف الذي سجّله المركز — راجع بياناتك وأكمل', ok: true);
+      }
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
+    } catch (e) {
+      if (mounted) snack(context, e is PasskeyAuthException ? e.message : 'تعذر إكمال الدخول. تحقق من قفل الجهاز والإنترنت.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+o(context, OtpScreen(p!, c!, decisions: Map<String, bool>.from(decisions)));
   }
 
   @override
@@ -2716,7 +2788,7 @@ class _AuthState extends State<AuthScreen> {
             child: ListView(padding: const EdgeInsets.fromLTRB(24, 22, 24, 16), children: [
               Center(child: Text('دخول الأطباء', style: t(22))),
               gap(4),
-              Center(child: Text('سجّل برقم المجلس الطبي ورقم هاتفك — حساب جديد أو دخول', textAlign: TextAlign.center, style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6))),
+              Center(child: Text('أدخل رقم المجلس ورقم الهاتف، ثم أنشئ مفتاح مرور أو ادخل به. لا توجد رسائل SMS أو OTP.', textAlign: TextAlign.center, style: t(13, w: FontWeight.w500, c: kGrey, h: 1.6))),
               AppField('رقم المجلس الطبي', controller: cn, hint: 'مثال: 12345', icon: Icons.badge_outlined, type: TextInputType.number, ltr: true, maxLength: 8, fmt: [digitsFmt], error: eCouncil, onChanged: (v) {
                 if (eCouncil != null) setState(() => eCouncil = null);
                 onCouncil(v);
@@ -2738,229 +2810,9 @@ class _AuthState extends State<AuthScreen> {
                   }), err: eAgree != null, onMore: () => go(context, const TermsScreen())),
               errText(eAgree),
               gap(20),
-              RedButton('إرسال رمز التحقق', arrow: true, onTap: send),
+              RedButton(busy ? 'جارٍ التحقق...' : 'الدخول / إنشاء حساب بمفتاح المرور', arrow: true, onTap: busy ? () {} : send),
             ]),
           ),
-        ]),
-      );
-}
-
-class OtpScreen extends StatefulWidget {
-  const OtpScreen(this.phone, this.council, {super.key, this.decisions = const {}});
-
-  /// قرارات الأخصائي على دعوات المراكز التي اتخذها في شاشة الدخول (معرّف المركز ← true قبول · false رفض).
-  final Map<String, bool> decisions;
-  final String phone, council; // phone: +249XXXXXXXXX (normPhone) · council: normLic
-  @override
-  State<OtpScreen> createState() => _OtpState();
-}
-
-class _OtpState extends State<OtpScreen> {
-  static const len = 6;
-  final cs = List.generate(len, (_) => TextEditingController());
-  final fs = List.generate(len, (_) => FocusNode());
-  int left = 45;
-  Timer? timer;
-  String? err;
-  bool busy = false;
-  String demoCode = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _send();
-    timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (left > 0 && mounted) setState(() => left--);
-    });
-  }
-
-  /// Firebase Auth يرسل SMS فعلياً؛ المحاكاة المحلية متاحة فقط عند تعطيل Firebase.
-  void _send() {
-    if (Fb.on) {
-      Fb.sendCode(
-        widget.phone,
-        onSent: () {
-          if (mounted) setState(() => err = null);
-        },
-        onError: (m) {
-          if (mounted) setState(() => err = m);
-        },
-        onAuto: _fbDone,
-      );
-    } else {
-      demoCode = otp.send(widget.phone);
-    }
-  }
-
-  /// بعد التحقق عبر Firebase: حسابي ← الرئيسية · ملف سجّله مركز ← مطالبة وتعبئة · جديد ← نموذج الملف · غير ذلك ← رفض.
-  Future<void> _fbDone() async {
-    busy = true;
-    final r = await me.afterSignIn(widget.council, widget.phone);
-    if (!mounted) return;
-    switch (r) {
-      case 'existing':
-        me.takeDecisions(widget.decisions);
-        snack(context, 'تم التحقق بنجاح، أهلاً بك $kBoss', ok: true);
-        home(context);
-      case 'claim':
-        me.takeDecisions(widget.decisions);
-        snack(context, 'وجدنا الملف الذي سجّله لك المركز — راجع بياناتك وعدّلها إن لزم', ok: true);
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
-      case 'new':
-        me.takeDecisions(widget.decisions);
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
-      default:
-        await Fb.signOut();
-        if (!mounted) return;
-        setState(() {
-          busy = false;
-          err = r == 'denied' ? 'رقم المجلس هذا مسجّل برقم هاتف آخر. تواصل مع الدعم.' : (r == 'other' ? 'هذا الهاتف مسجّل برقم مجلس مختلف.' : 'تعذّر إكمال الدخول، حاول مجدداً');
-        });
-    }
-  }
-
-  @override
-  void dispose() {
-    timer?.cancel();
-    for (final c in cs) {
-      c.dispose();
-    }
-    for (final f in fs) {
-      f.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> verify() async {
-    if (busy) return;
-    final code = cs.map((c) => latin(c.text)).join();
-    if (code.length != len) {
-      setState(() => err = 'أدخل الرمز المكوّن من $len أرقام');
-      return;
-    }
-    if (Fb.on) {
-      setState(() {
-        busy = true;
-        err = null;
-      });
-      final authError = await Fb.verify(code);
-      if (authError != null) {
-        if (mounted) setState(() {
-          busy = false;
-          err = authError;
-        });
-        return;
-      }
-      await _fbDone();
-      return;
-    }
-    final e = otp.check(widget.phone, code);
-    if (e != null) {
-      setState(() => err = e);
-      return;
-    }
-    busy = true;
-    final lic = widget.council, ph = widget.phone;
-    final rec = platform.find(lic);
-
-    // 1) نفس الحساب المسجَّل على هذا الجهاز.
-    if (me.registered && me.council == lic) {
-      me.phone = ph;
-      snack(context, 'تم التحقق بنجاح، أهلاً بك $kBoss', ok: true);
-      home(context);
-      return;
-    }
-    // حساب طبيب آخر على الجهاز: نحفظه قبل أن نبدّل (لا نمسحه).
-    platform.saveAccount(me);
-    // 2) حساب مفعَّل سابقاً وله نسخة محفوظة → نستعيده.
-    if (rec != null && rec.claimed && rec.saved != null) {
-      me.restore(rec.saved!);
-      me.phone = ph;
-      snack(context, 'تم التحقق بنجاح، أهلاً بك $kBoss', ok: true);
-      home(context);
-      return;
-    }
-    // 3) حساب جديد — وإن كان سجّله مركز (والهاتف مطابق، وقد تحقّقنا منه في الشاشة السابقة) نربط ملفه تلقائياً.
-    me.reset();
-    me.begin(lic, ph);
-    if (rec != null && !rec.claimed) {
-      me.claimFrom(rec);
-      me.takeDecisions(widget.decisions);
-      snack(context, 'وجدنا الملف الذي سجّله لك المركز — راجع بياناتك وأكمل', ok: true);
-    }
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileFormScreen(setup: true)));
-  }
-
-  void resend() {
-    if (left > 0) return;
-    setState(() {
-      left = 45;
-      err = null;
-    });
-    _send();
-    for (final c in cs) {
-      c.clear();
-    }
-    fs[0].requestFocus();
-    snack(context, 'تم إرسال رمز جديد', ok: true);
-  }
-
-  @override
-  Widget build(BuildContext context) => RedPage(
-        title: 'رمز التحقق',
-        bottomBar: btnBar(context, 'تأكيد', verify),
-        body: ListView(padding: const EdgeInsets.all(24), children: [
-          gap(6),
-          Center(child: gTile(Icons.verified_user_rounded, size: 78)),
-          gap(16),
-          Center(child: Text('أدخل رمز التحقق', style: t(20))),
-          gap(6),
-          Center(child: Text('أرسلنا رمزاً من $len أرقام إلى', style: t(13, w: FontWeight.w500, c: kGrey))),
-          Center(child: Directionality(textDirection: TextDirection.ltr, child: Text(fmtPhone(widget.phone), style: t(15, c: kInk)))),
-          gap(24),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              for (var i = 0; i < len; i++)
-                Container(
-                  width: 46,
-                  height: 60,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: err != null ? kRed : kLine, width: 1.5), boxShadow: kShadow),
-                  child: TextField(
-                    controller: cs[i],
-                    focusNode: fs[i],
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    maxLength: 1,
-                    inputFormatters: [digitsFmt],
-                    style: t(22),
-                    decoration: const InputDecoration(border: InputBorder.none, counterText: ''),
-                    onChanged: (v) {
-                      if (err != null) setState(() => err = null);
-                      if (v.isNotEmpty && i < len - 1) fs[i + 1].requestFocus();
-                      if (v.isEmpty && i > 0) fs[i - 1].requestFocus();
-                      if (v.isNotEmpty && i == len - 1) verify();
-                    },
-                  ),
-                ),
-            ]),
-          ),
-          if (err != null) Padding(padding: const EdgeInsets.only(top: 10), child: Center(child: Text(err!, style: t(12, c: kRed)))),
-          gap(20),
-          Center(
-            child: left > 0
-                ? Text.rich(TextSpan(text: 'إعادة إرسال الرمز بعد ', style: t(12.5, w: FontWeight.w500, c: kGrey), children: [TextSpan(text: '00:${left.toString().padLeft(2, '0')}', style: t(12.5, c: kRed))]))
-                : Tap(onTap: resend, child: Padding(padding: const EdgeInsets.all(8), child: Text('إعادة إرسال الرمز', style: t(13.5, c: kRed)))),
-          ),
-          if (kDemoOtp) ...[
-            gap(14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: kAmberBg, borderRadius: BorderRadius.circular(14)),
-              child: Text('وضع تجريبي: لا تُرسَل رسالة SMS فعلية.\nرمز التحقق: $demoCode', textAlign: TextAlign.center, style: t(12.5, c: kAmber, h: 1.7)),
-            ),
-          ],
         ]),
       );
 }
