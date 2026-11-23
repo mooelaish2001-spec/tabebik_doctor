@@ -813,52 +813,6 @@ String? normLic(String raw) {
 /// يقبل الأرقام اللاتينية والعربية فقط في حقول المجلس والهاتف والرمز.
 final digitsFmt = FilteringTextInputFormatter.allow(RegExp('[0-9\u0660-\u0669\u06F0-\u06F9]'));
 
-// ───────────────────────── رمز التحقق (OTP) ─────────────────────────
-class _OtpEntry {
-  _OtpEntry(this.code) : at = DateTime.now();
-  final String code;
-  final DateTime at;
-  int tries = 0;
-}
-
-/// نموذج محلي لرمز التحقق — نفس سلوك تطبيق المركز (6 أرقام · 5 دقائق · 5 محاولات).
-/// في الإنتاج: الخادم يولّد الرمز ويرسله بـ SMS ولا يعيده للتطبيق أبداً، ويتحقق منه ويحدّ الإرسال لكل رقم.
-/// هنا send() يرجع الرمز ليُعرض على الشاشة (للتجربة فقط — kDemoOtp).
-class OtpService {
-  final _m = <String, _OtpEntry>{};
-  static const maxTries = 5;
-  static const ttl = Duration(minutes: 5);
-
-  String send(String phone) {
-    final code = (100000 + math.Random.secure().nextInt(900000)).toString();
-    _m[phone] = _OtpEntry(code);
-    return code;
-  }
-
-  /// يرجع null عند النجاح، وإلا رسالة الخطأ.
-  String? check(String phone, String code) {
-    final o = _m[phone];
-    if (o == null) return 'اطلب رمزاً جديداً أولاً';
-    if (DateTime.now().difference(o.at) > ttl) {
-      _m.remove(phone);
-      return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً';
-    }
-    o.tries++;
-    if (o.code != code) {
-      if (o.tries >= maxTries) {
-        _m.remove(phone);
-        return 'تجاوزت عدد المحاولات، اطلب رمزاً جديداً';
-      }
-      return 'الرمز غير صحيح (${maxTries - o.tries} محاولات متبقية)';
-    }
-    _m.remove(phone);
-    return null;
-  }
-}
-
-final otp = OtpService();
-
-
 // ═════════════════════════════════════════════════════════════════════════
 //  نقاط الربط (Config) — غيّر هذه القيم قبل النشر
 // ═════════════════════════════════════════════════════════════════════════
@@ -2774,9 +2728,6 @@ class _AuthState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => busy = false);
     }
-  }
-
-o(context, OtpScreen(p!, c!, decisions: Map<String, bool>.from(decisions)));
   }
 
   @override
