@@ -2292,6 +2292,8 @@ Future<List<CenterTerms>> invitesFor(String lic) async {
     final r = platform.find(lic);
     return (r != null && !r.claimed) ? r.terms : const <CenterTerms>[];
   }
+  // لا نكشف دعوات المجلس قبل إثبات ملكية رقم الهاتف عبر Firebase Phone Auth.
+  if (Fb.uid == null) return const <CenterTerms>[];
   final rows = await Fb.invitesOfLic(lic);
   final out = <CenterTerms>[];
   for (final m in rows) {
