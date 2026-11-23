@@ -53,7 +53,7 @@ export const createPatientBooking = onCall({enforceAppCheck:true}, async (reques
       typeof input.female !== "boolean" ||
       typeof input.title !== "string" || input.title.length > 180 ||
       typeof input.when !== "string" || input.when.length > 100 ||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateIso) ||
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dateIso) ||
       !Number.isInteger(timeMin) || timeMin < 0 || timeMin > 1439 ||
       typeof input.place !== "string" || input.place.length > 220 ||
       !Number.isInteger(price) || price < 0 || price > 100000000) {
