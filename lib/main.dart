@@ -817,7 +817,7 @@ final digitsFmt = FilteringTextInputFormatter.allow(RegExp('[0-9\u0660-\u0669\u0
 //  نقاط الربط (Config) — غيّر هذه القيم قبل النشر
 // ═════════════════════════════════════════════════════════════════════════
 /// true = حساب تجريبي معبّأ بأماكن عمل ومرضى الليلة. false = حساب جديد فارغ.
-const kDemoData = bool.fromEnvironment('DEMO_DATA', defaultValue: true); // للإنتاج: --dart-define=DEMO_DATA=false
+const kDemoData = bool.fromEnvironment('DEMO_DATA', defaultValue: false); // للإنتاج: --dart-define=DEMO_DATA=false
 
 /// أزرار «محاكاة» لقرارات الطرف الآخر (تأكيد المركز، توثيق الحساب). للإنتاج: --dart-define=SIMULATE=false
 const kSimulate = bool.fromEnvironment('SIMULATE', defaultValue: true);
