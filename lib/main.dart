@@ -2536,7 +2536,7 @@ class _AuthState extends State<AuthScreen> {
     try {
       if (Fb.on) {
         try {
-          await passkey.signIn(pin: await requestSecurityPin(context));
+          await passkey.signIn(requestPin: () => requestSecurityPin(context));
         } on PasskeyAuthException catch (e) {
           if (e.code != 'passkey-not-found') rethrow;
           await passkey.registerAccount(
